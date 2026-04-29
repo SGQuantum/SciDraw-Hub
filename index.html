@@ -1,0 +1,2485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>科研绘图工具全景展示平台</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+
+    <style>
+        /* =========================================================
+           SciDraw Hub 单文件版
+           修改重点：
+           1. 示例图片：搜索 "示例图片配置区" 或 buildExampleSVG
+           2. 代码示例：搜索 "代码示例配置区" 或 detailTemplates
+           3. 工具数据：搜索 "工具数据区" 或 toolsData
+           ========================================================= */
+
+        /* ========== 基础变量 - 深色主题 ========== */
+        :root {
+            --bg-primary: #07071a;
+            --bg-secondary: #0d0d2b;
+            --bg-card: rgba(255, 255, 255, 0.04);
+            --bg-card-hover: rgba(255, 255, 255, 0.08);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.18);
+            --text-primary: #f0f0ff;
+            --text-secondary: rgba(240, 240, 255, 0.65);
+            --text-muted: rgba(240, 240, 255, 0.35);
+            --sidebar-w: 270px;
+
+            --c1: #4facfe; --c1g: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --c2: #a855f7; --c2g: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            --c3: #10b981; --c3g: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            --c4: #f59e0b; --c4g: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+            --c5: #ec4899; --c5g: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
+            --c6: #06b6d4; --c6g: linear-gradient(135deg, #06b6d4 0%, #67e8f9 100%);
+            --c7: #f97316; --c7g: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+            --c8: #8b5cf6; --c8g: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-card: rgba(15, 23, 42, 0.04);
+            --bg-card-hover: rgba(15, 23, 42, 0.08);
+            --border: rgba(15, 23, 42, 0.08);
+            --border-hover: rgba(15, 23, 42, 0.15);
+            --text-primary: #0f172a;
+            --text-secondary: rgba(15, 23, 42, 0.65);
+            --text-muted: rgba(15, 23, 42, 0.35);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .bg-mesh { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+        .bg-mesh::before {
+            content: "";
+            position: absolute;
+            top: -30%; left: -20%;
+            width: 60%; height: 80%;
+            background: radial-gradient(ellipse, rgba(79, 172, 254, 0.06) 0%, transparent 70%);
+            animation: meshFloat1 25s ease-in-out infinite;
+        }
+        .bg-mesh::after {
+            content: "";
+            position: absolute;
+            bottom: -20%; right: -10%;
+            width: 50%; height: 70%;
+            background: radial-gradient(ellipse, rgba(168, 85, 247, 0.05) 0%, transparent 70%);
+            animation: meshFloat2 30s ease-in-out infinite;
+        }
+        @keyframes meshFloat1 { 50% { transform: translate(3%, 2%); } }
+        @keyframes meshFloat2 { 50% { transform: translate(-2%, -3%); } }
+
+        .app { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+
+        .sidebar {
+            width: var(--sidebar-w);
+            background: var(--bg-secondary);
+            backdrop-filter: blur(30px);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            inset: 0 auto 0 0;
+            height: 100vh;
+            z-index: 100;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+        .sidebar.collapsed { width: 70px; }
+        .sidebar.collapsed .logo-text,
+        .sidebar.collapsed .logo-sub,
+        .sidebar.collapsed .nav-text,
+        .sidebar.collapsed .nav-count,
+        .sidebar.collapsed .nav-label,
+        .sidebar.collapsed .sidebar-stats { opacity: 0; visibility: hidden; }
+
+        .sidebar-toggle {
+            position: absolute;
+            top: 50%; right: -14px;
+            transform: translateY(-50%);
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 101;
+        }
+        .sidebar-toggle:hover { background: var(--c1); color: #fff; border-color: var(--c1); }
+        .sidebar.collapsed .sidebar-toggle i { transform: rotate(180deg); }
+
+        .sidebar-logo { padding: 1.5rem 1.25rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        .logo-inner { display: flex; align-items: center; gap: 0.85rem; }
+        .logo-icon-wrap {
+            width: 42px; height: 42px;
+            border-radius: 13px;
+            display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, var(--c1), var(--c2));
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            flex-shrink: 0;
+        }
+        .logo-text { font-size: 1.05rem; font-weight: 800; letter-spacing: -0.3px; }
+        .logo-sub { font-size: 0.68rem; color: var(--text-muted); }
+
+        .sidebar-nav { flex: 1; padding: 1rem 0.75rem; overflow-y: auto; overflow-x: hidden; }
+        .nav-label {
+            padding: 0.6rem 0.9rem 0.3rem;
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        .nav-item {
+            display: flex; align-items: center; gap: 0.85rem;
+            padding: 0.75rem 0.9rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--text-secondary);
+            position: relative;
+            margin-bottom: 0.15rem;
+            border: 1px solid transparent;
+            user-select: none;
+            white-space: nowrap;
+        }
+        .nav-item:hover, .nav-item.active { background: var(--bg-card-hover); color: var(--text-primary); }
+        .nav-item.active { border-color: var(--border); }
+        .nav-item.active::before {
+            content: "";
+            position: absolute;
+            left: 0; top: 50%;
+            transform: translateY(-50%);
+            width: 3px; height: 60%;
+            border-radius: 0 3px 3px 0;
+            background: var(--nav-accent, var(--text-secondary));
+        }
+        .nav-icon {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .nav-text { font-size: 0.88rem; font-weight: 500; flex: 1; }
+        .nav-count {
+            font-size: 0.65rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.07);
+            color: var(--text-muted);
+        }
+        .nav-item[data-cat="home"] { --nav-accent: var(--text-secondary); }
+        .nav-item[data-cat="flowchart"] { --nav-accent: var(--c1); }
+        .nav-item[data-cat="mindmap"] { --nav-accent: var(--c2); }
+        .nav-item[data-cat="chart"] { --nav-accent: var(--c3); }
+        .nav-item[data-cat="3dmodel"] { --nav-accent: var(--c4); }
+        .nav-item[data-cat="code"] { --nav-accent: var(--c5); }
+        .nav-item[data-cat="sim"] { --nav-accent: var(--c6); }
+        .nav-item[data-cat="science"] { --nav-accent: var(--c7); }
+        .nav-item[data-cat="aiart"] { --nav-accent: var(--c8); }
+        .nav-item[data-cat="home"] .nav-icon { background: rgba(255,255,255,0.08); }
+        .nav-item[data-cat="flowchart"] .nav-icon { background: rgba(79,172,254,0.12); color: var(--c1); }
+        .nav-item[data-cat="mindmap"] .nav-icon { background: rgba(168,85,247,0.12); color: var(--c2); }
+        .nav-item[data-cat="chart"] .nav-icon { background: rgba(16,185,129,0.12); color: var(--c3); }
+        .nav-item[data-cat="3dmodel"] .nav-icon { background: rgba(245,158,11,0.12); color: var(--c4); }
+        .nav-item[data-cat="code"] .nav-icon { background: rgba(236,72,153,0.12); color: var(--c5); }
+        .nav-item[data-cat="sim"] .nav-icon { background: rgba(6,182,212,0.12); color: var(--c6); }
+        .nav-item[data-cat="science"] .nav-icon { background: rgba(249,115,22,0.12); color: var(--c7); }
+        .nav-item[data-cat="aiart"] .nav-icon { background: rgba(139,92,246,0.12); color: var(--c8); }
+
+        .sidebar-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--border); }
+        .sidebar-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+        .s-stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 0.7rem; text-align: center; white-space: nowrap; }
+        .s-stat .n { font-size: 1.25rem; font-weight: 800; }
+        .s-stat .l { font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; margin-top: 0.15rem; }
+
+        .main { flex: 1; margin-left: var(--sidebar-w); min-height: 100vh; transition: all 0.4s cubic-bezier(0.4,0,0.2,1); }
+        .sidebar.collapsed + .main { margin-left: 70px; }
+
+        .topbar {
+            position: sticky; top: 0; z-index: 50;
+            background: var(--bg-secondary);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 0.9rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .topbar-title h1 { font-size: 1.3rem; font-weight: 700; }
+        .breadcrumb { font-size: 0.8rem; color: var(--text-muted); }
+        .breadcrumb span { color: var(--text-secondary); }
+        .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
+        .search-box {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.5rem 0.9rem;
+        }
+        .search-box:focus-within { border-color: rgba(102,126,234,0.4); box-shadow: 0 0 15px rgba(102,126,234,0.1); }
+        .search-box input { background: none; border: none; outline: none; color: var(--text-primary); font-size: 0.85rem; width: 200px; }
+        .search-box input::placeholder, .search-box i { color: var(--text-muted); }
+        .topbar-btn {
+            width: 36px; height: 36px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--bg-card); border: 1px solid var(--border);
+            color: var(--text-secondary); cursor: pointer;
+        }
+        .topbar-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+        .topbar-btn.theme-toggle.active { background: var(--c1); color: #fff; border-color: var(--c1); }
+
+        .content-area { padding: 2rem; }
+        .page { display: none; opacity: 0; transform: translateY(20px); transition: all 0.4s cubic-bezier(0.4,0,0.2,1); }
+        .page.active { display: block; opacity: 1; transform: translateY(0); }
+
+        .hero { text-align: center; padding: 3rem 1rem 2rem; }
+        .hero-badge {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.45rem 1.1rem;
+            background: rgba(102,126,234,0.12);
+            border: 1px solid rgba(102,126,234,0.25);
+            border-radius: 50px;
+            font-size: 0.8rem;
+            color: var(--c1);
+            margin-bottom: 1.25rem;
+        }
+        .hero h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; line-height: 1.25; margin-bottom: 1rem; }
+        .grad { background: linear-gradient(135deg, var(--c1), var(--c2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { color: var(--text-secondary); max-width: 580px; margin: 0 auto 2rem; }
+        .hero-stats { display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap; }
+        .h-stat .num { font-size: 2rem; font-weight: 800; background: linear-gradient(135deg, var(--c1), var(--c2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .h-stat .lab { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem; }
+
+        .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; margin-top: 2.5rem; }
+        .cat-card, .tool-card, .detail-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+        .cat-card {
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.35s cubic-bezier(0.175,0.885,0.32,1.275);
+            position: relative;
+            overflow: hidden;
+        }
+        .cat-card::after, .tool-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; opacity: 0; transition: opacity 0.3s; background: var(--accent-grad); }
+        .cat-card:hover, .tool-card:hover { transform: translateY(-6px); border-color: var(--border-hover); box-shadow: 0 15px 35px rgba(0,0,0,0.25); }
+        .cat-card:hover::after, .tool-card:hover::before { opacity: 1; }
+        .cat-card-header, .card-hdr { display: flex; align-items: flex-start; gap: 0.9rem; margin-bottom: 1rem; }
+        .cat-card-icon, .card-icon {
+            width: 48px; height: 48px; border-radius: 13px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; flex-shrink: 0;
+            background: color-mix(in srgb, var(--accent) 14%, transparent);
+            color: var(--accent);
+        }
+        .cat-card-name, .card-name { font-size: 1.05rem; font-weight: 700; }
+        .cat-card-num, .card-vendor { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem; }
+        .cat-card-desc, .card-desc { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 1rem; }
+        .cat-card-tags, .card-tags, .platform-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+        .cat-tag, .t-tag, .plat-tag {
+            padding: 0.22rem 0.6rem;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 6px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .page-header { margin-bottom: 2rem; }
+        .page-header-bar { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
+        .page-icon-lg { width: 54px; height: 54px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+        .page-title { font-size: 1.6rem; font-weight: 800; }
+        .page-desc { font-size: 0.88rem; color: var(--text-secondary); margin-top: 0.2rem; }
+        .page-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--border), transparent); }
+        .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 1.25rem; }
+        .tool-card { padding: 1.6rem; transition: all 0.4s cubic-bezier(0.175,0.885,0.32,1.275); animation: cardIn 0.5s ease both; position: relative; overflow: hidden; cursor: pointer; }
+        @keyframes cardIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+        .card-info { flex: 1; }
+        .card-badge { padding: 0.2rem 0.65rem; border-radius: 20px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; }
+        .badge-free { background: rgba(16,185,129,0.12); color: var(--c3); }
+        .badge-pro { background: rgba(168,85,247,0.12); color: var(--c2); }
+        .badge-open { background: rgba(245,158,11,0.12); color: var(--c4); }
+        .badge-enterprise { background: rgba(79,172,254,0.12); color: var(--c1); }
+        .badge-trial { background: rgba(6,182,212,0.12); color: var(--c6); }
+        .badge-basic { background: rgba(148,163,184,0.14); color: #94a3b8; }
+        .card-tags, .platform-tags { margin-bottom: 1.1rem; }
+        .card-ftr { display: flex; justify-content: space-between; align-items: center; padding-top: 0.9rem; border-top: 1px solid var(--border); }
+        .card-links { display: flex; gap: 0.85rem; }
+        .c-link { color: var(--text-muted); text-decoration: none; font-size: 0.78rem; display: flex; align-items: center; gap: 0.3rem; }
+        .c-link:hover { color: var(--c1); }
+        .card-stars { display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: var(--text-muted); }
+        .view-detail-btn { margin-top: 0.8rem; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.42rem 0.9rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: none; width: 100%; justify-content: center; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+        .view-detail-btn:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: rgba(13, 13, 43, 0.96);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            width: 92%;
+            max-width: 920px;
+            max-height: 88vh;
+            overflow: hidden;
+            position: relative;
+            animation: modalIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+        }
+        [data-theme="light"] .modal { background: rgba(255,255,255,0.98); }
+        @keyframes modalIn { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .modal-close {
+            position: absolute;
+            top: 1rem; right: 1rem;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 3;
+        }
+        .modal-close:hover { background: rgba(239,68,68,0.12); color: #ef4444; border-color: rgba(239,68,68,0.3); }
+
+        .detail-hero { padding: 1.45rem 2rem 1.2rem; border-bottom: 1px solid var(--border); background: radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--detail-accent) 18%, transparent), transparent 35%); }
+        .detail-hero-main { display: flex; align-items: center; gap: 1.2rem; padding-right: 3rem; }
+        .detail-logo { width: 64px; height: 64px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 1.65rem; flex-shrink: 0; background: color-mix(in srgb, var(--detail-accent) 14%, transparent); color: var(--detail-accent); border: 1px solid var(--border); }
+        .detail-title-row { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+        .detail-title-row h2 { font-size: 1.45rem; line-height: 1.25; font-weight: 850; }
+        .detail-subtitle { margin-top: 0.38rem; color: var(--text-muted); font-size: 0.82rem; display: flex; gap: 0.45rem; flex-wrap: wrap; }
+        .detail-quick-badge { padding: 0.18rem 0.58rem; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-secondary); font-size: 0.72rem; }
+
+        .detail-tabs { display: flex; gap: 0.45rem; padding: 0 2rem; border-bottom: 1px solid var(--border); overflow-x: auto; }
+        .detail-tab { border: none; background: transparent; color: var(--text-muted); padding: 0.92rem 0.95rem; cursor: pointer; font-size: 0.82rem; font-weight: 700; white-space: nowrap; position: relative; }
+        .detail-tab:hover, .detail-tab.active { color: var(--text-primary); }
+        .detail-tab.active::after { content: ""; position: absolute; left: 0.8rem; right: 0.8rem; bottom: 0; height: 2px; border-radius: 999px; background: var(--detail-accent); }
+        .detail-body { padding: 1.7rem 2rem 2rem; max-height: calc(88vh - 175px); overflow-y: auto; }
+        .detail-panel { display: none; }
+        .detail-panel.active { display: block; animation: detailPanelIn 0.28s ease both; }
+        @keyframes detailPanelIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        .detail-card { padding: 1.25rem; margin-bottom: 1.25rem; }
+        .detail-card-title { font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); font-weight: 800; margin-bottom: 0.85rem; }
+        .detail-intro { color: var(--text-secondary); font-size: 0.92rem; line-height: 1.85; }
+        .detail-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+        .detail-feature-list { list-style: none; display: grid; gap: 0.68rem; }
+        .detail-feature-list li { display: flex; gap: 0.55rem; align-items: flex-start; color: var(--text-secondary); font-size: 0.86rem; }
+        .detail-feature-list i { color: var(--detail-accent); margin-top: 0.24rem; font-size: 0.72rem; }
+        .score-list { display: grid; gap: 0.65rem; }
+        .score-row { display: grid; grid-template-columns: 5.2rem 1fr 2rem; gap: 0.7rem; align-items: center; font-size: 0.8rem; color: var(--text-muted); }
+        .score-bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+        .score-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--detail-accent), rgba(255,255,255,0.55)); }
+        .score-num { color: var(--text-primary); font-weight: 800; text-align: right; }
+        .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .pc-box { padding: 1rem; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,0.025); }
+        .pc-box.pro { border-color: rgba(16,185,129,0.22); background: rgba(16,185,129,0.045); }
+        .pc-box.con { border-color: rgba(239,68,68,0.22); background: rgba(239,68,68,0.045); }
+        .pc-title { font-size: 0.82rem; font-weight: 800; margin-bottom: 0.55rem; }
+        .pc-box.pro .pc-title { color: #10b981; }
+        .pc-box.con .pc-title { color: #ef4444; }
+        .pc-box ul { padding-left: 1rem; color: var(--text-secondary); font-size: 0.84rem; line-height: 1.9; }
+        .detail-chip-wrap { display: flex; gap: 0.48rem; flex-wrap: wrap; }
+        .detail-chip { padding: 0.25rem 0.62rem; border-radius: 7px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-secondary); font-size: 0.74rem; font-weight: 650; }
+        .example-canvas { border-radius: 18px; border: 1px solid var(--border); background: radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--detail-accent) 28%, transparent), transparent 32%), linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018)); min-height: 360px; overflow: hidden; position: relative; padding: 1.2rem; }
+        .example-svg { width: 100%; min-height: 310px; display: block; }
+        .example-caption { color: var(--text-secondary); font-size: 0.86rem; line-height: 1.75; margin-top: 1rem; }
+        .steps-list { display: grid; gap: 0.85rem; }
+        .step-item { display: grid; grid-template-columns: 2.35rem 1fr; gap: 0.85rem; align-items: flex-start; padding: 1rem; border-radius: 14px; border: 1px solid var(--border); background: var(--bg-card); }
+        .step-num { width: 2.35rem; height: 2.35rem; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--detail-accent) 18%, transparent); color: var(--detail-accent); font-weight: 900; }
+        .step-title { font-size: 0.92rem; font-weight: 800; margin-bottom: 0.24rem; }
+        .step-desc { color: var(--text-secondary); font-size: 0.84rem; line-height: 1.7; }
+        .code-shell { border-radius: 16px; border: 1px solid var(--border); overflow: hidden; background: #080817; }
+        [data-theme="light"] .code-shell { background: #111827; }
+        .code-toolbar { height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); font-size: 0.78rem; }
+        .copy-code-btn { border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); border-radius: 8px; padding: 0.35rem 0.7rem; cursor: pointer; font-size: 0.75rem; }
+        .code-shell pre { margin: 0; padding: 1.1rem; overflow-x: auto; color: #d7ddff; font-size: 0.82rem; line-height: 1.7; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        .compare-grid, .resource-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+        .resource-grid { grid-template-columns: repeat(2, 1fr); }
+        .compare-card, .resource-link-card { border: 1px solid var(--border); border-radius: 14px; padding: 1rem; background: var(--bg-card); }
+        .compare-label { color: var(--text-muted); font-size: 0.74rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 0.55rem; }
+        .compare-value { color: var(--text-primary); font-size: 0.96rem; font-weight: 850; }
+        .resource-link-card { display: flex; align-items: center; gap: 0.8rem; text-decoration: none; color: var(--text-primary); transition: all 0.25s ease; }
+        .resource-link-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--detail-accent) 40%, var(--border)); background: var(--bg-card-hover); }
+        .resource-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--detail-accent) 14%, transparent); color: var(--detail-accent); flex-shrink: 0; }
+        .resource-title { font-size: 0.9rem; font-weight: 850; }
+        .resource-desc { color: var(--text-muted); font-size: 0.76rem; margin-top: 0.1rem; }
+
+        .loading-overlay { position: fixed; inset: 0; background: var(--bg-primary); z-index: 9999; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1rem; transition: opacity 0.6s ease; }
+        .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        .loading-spinner { width: 48px; height: 48px; border: 3px solid rgba(79,172,254,0.1); border-top-color: var(--c1); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text, .empty-state { color: var(--text-muted); }
+        .empty-state { text-align: center; padding: 4rem 2rem; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+        @media (max-width: 1200px) { .cat-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 900px) { .cat-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 768px) {
+            .sidebar { width: 0; transform: translateX(-100%); }
+            .sidebar.mobile-open { width: 270px; transform: translateX(0); }
+            .main { margin-left: 0; }
+            .topbar { padding: 0.75rem 1rem; }
+            .content-area { padding: 1rem; }
+            .tools-grid, .cat-grid, .detail-two-col, .pros-cons, .resource-grid { grid-template-columns: 1fr; }
+            .compare-grid { grid-template-columns: repeat(2, 1fr); }
+            .search-box input { width: 140px; }
+            .modal { width: 94%; }
+            .detail-hero { padding: 1.2rem; }
+            .detail-tabs { padding: 0 1.1rem; }
+            .detail-body { padding: 1.1rem; }
+        }
+
+            /* ========== 全屏图片查看器 ========== */
+        .image-fullscreen-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(8px);
+            animation: fadeIn 0.3s ease;
+        }
+        .image-fullscreen-overlay.active {
+            display: flex;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .image-fullscreen-container {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .image-fullscreen-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: zoomIn 0.3s ease;
+        }
+        @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .image-fullscreen-close {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.25s ease;
+            z-index: 2001;
+        }
+        .image-fullscreen-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+            transform: scale(1.1);
+        }
+        .example-canvas img {
+            cursor: zoom-in;
+            transition: transform 0.2s ease;
+        }
+        .example-canvas img:hover {
+            transform: scale(1.02);
+            }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">加载中...</div>
+    </div>
+
+    <div class="bg-mesh"></div>
+
+    <div class="app">
+        <aside class="sidebar" id="sidebar">
+            <button class="sidebar-toggle" id="sidebarToggle"><i class="fas fa-chevron-left"></i></button>
+            <div class="sidebar-logo">
+                <div class="logo-inner">
+                    <div class="logo-icon-wrap"><i class="fas fa-drafting-compass"></i></div>
+                    <div><div class="logo-text">SciDraw Hub</div><div class="logo-sub">科研绘图工具平台</div></div>
+                </div>
+            </div>
+            <nav class="sidebar-nav" id="sidebarNav"></nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-stats">
+                    <div class="s-stat"><div class="n" id="sidebarTotal">63</div><div class="l">工具总数</div></div>
+                    <div class="s-stat"><div class="n">8</div><div class="l">分类</div></div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main" id="mainContent">
+            <header class="topbar">
+                <div class="topbar-title">
+                    <div>
+                        <h1 id="pageHeading">科研绘图工具全景展示平台</h1>
+                        <div class="breadcrumb"><span>SciDraw Hub</span> / <span id="breadcrumbCat">首页</span></div>
+                    </div>
+                </div>
+                <div class="topbar-right">
+                    <div class="search-box"><i class="fas fa-search"></i><input type="text" placeholder="搜索工具..." id="searchInput"></div>
+                    <button class="topbar-btn theme-toggle" id="themeToggle" title="切换主题"><i class="fas fa-adjust"></i></button>
+                    <button class="topbar-btn" id="mobileMenuBtn" style="display:none;" title="菜单"><i class="fas fa-bars"></i></button>
+                </div>
+            </header>
+
+            <div class="content-area" id="contentArea"></div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modal">
+            <button class="modal-close" id="modalClose"><i class="fas fa-times"></i></button>
+
+            <div class="detail-hero">
+                <div class="detail-hero-main">
+                    <div class="detail-logo" id="modalIcon"><i class="fas fa-tools"></i></div>
+                    <div class="detail-title-wrap">
+                        <div class="detail-title-row">
+                            <h2 id="modalTitle">工具名称</h2>
+                            <span class="card-badge" id="modalPrimaryBadge">标签</span>
+                        </div>
+                        <div class="detail-subtitle" id="modalSubtitle"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-tabs" id="detailTabs">
+                <button class="detail-tab active" data-tab="overview"><i class="fas fa-layer-group"></i> 概览</button>
+                <button class="detail-tab" data-tab="example"><i class="fas fa-image"></i> 示例图</button>
+                <button class="detail-tab" data-tab="steps"><i class="fas fa-list-check"></i> 使用步骤</button>
+                <button class="detail-tab" data-tab="code"><i class="fas fa-code"></i> 代码示例</button>
+                <button class="detail-tab" data-tab="compare"><i class="fas fa-sliders"></i> 横向对比</button>
+                <button class="detail-tab" data-tab="resources"><i class="fas fa-link"></i> 资源链接</button>
+            </div>
+
+            <div class="image-fullscreen-overlay" id="imageFullscreenOverlay">
+                <button class="image-fullscreen-close" id="imageFullscreenClose"><i class="fas fa-times"></i></button>
+                <div class="image-fullscreen-container">
+                    <img class="image-fullscreen-img" id="imageFullscreenImg" src="" alt="全屏图片">
+                </div>
+            </div>
+
+            <div class="detail-body" id="detailBody">
+                <section class="detail-panel active" data-panel="overview" id="panelOverview"></section>
+                <section class="detail-panel" data-panel="example" id="panelExample"></section>
+                <section class="detail-panel" data-panel="steps" id="panelSteps"></section>
+                <section class="detail-panel" data-panel="code" id="panelCode"></section>
+                <section class="detail-panel" data-panel="compare" id="panelCompare"></section>
+                <section class="detail-panel" data-panel="resources" id="panelResources"></section>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================================
+           工具数据区：如果要新增、删除、修改工具，从这里改。
+           每个工具字段：id/name/vendor/badge/badgeText/icon/desc/features/tags/platforms/stars/link/doc
+           ========================================================= */
+
+        const T = (id, name, vendor, badge, badgeText, icon, desc, features, tags, platforms, stars, link, doc, codeExample, codeLang) => ({ 
+            id, name, vendor, badge, badgeText, icon, desc, features, tags, platforms, stars, link, doc, codeExample, codeLang 
+        });
+
+        const toolsData = {
+            flowchart: [
+                T('visio', 'Microsoft Visio', 'Microsoft', 'badge-enterprise', '企业版', 'fa-sitemap', '微软官方流程图解决方案，与 Office 365 无缝集成，企业级安全和合规支持。', 
+                    ['Office集成', '数据可视化', 'IT网络图', '泳道图', 'SharePoint集成', '权限管理'], ['企业级', 'Office集成', 'IT架构', '微软生态'], ['Web', 'Desktop'], '⭐ 4.5', 
+                    'https://www.microsoft.com/zh-cn/microsoft-365/visio', 'https://support.microsoft.com/visio', 
+                    `// 这里是 Visio 的伪代码示例
+                    Diagram -> Flowchart;
+                    Shape.Add("Process");
+                    Connector.Link(A, B);`, 'VSScript'
+                ),
+                T('drawio', 'draw.io / diagrams.net', 'JGraph Ltd', 'badge-free', '免费', 'fa-project-diagram', '功能最全面的免费在线流程图工具，支持离线使用，导出格式丰富，学术界使用最广泛。', 
+                    ['拖拽式编辑', '丰富的形状库', '支持UML图', '多人协作', '导出PNG/SVG/PDF', '支持嵌入'], ['流程图', 'UML', '架构图', '离线可用', 'Chrome插件'], ['Web', 'Desktop', 'Chrome'], 
+                    '⭐ 4.8', 'https://app.diagrams.net', 'https://www.diagrams.net/doc',
+                    `暂无代码示例`, '/'
+                ),
+                T('lucidchart', 'Lucidchart', 'Lucid Software', 'badge-trial', '免费额度', 'fa-chart-tree', '基于云端的智能图表协作平台，与 Google Workspace 和 Confluence 深度集成，适合团队使用。', 
+                    ['实时协作', '智能连接线', '模板丰富', '数据链接图表', 'API集成', '企业SSO'], ['在线协作', '模板库', 'GSuite集成', '团队使用'], ['Web'], '⭐ 4.6', 'https://www.lucidchart.com', 
+                    'https://www.lucidchart.com/pages/learn',`暂无代码示例`, '/'
+                ),
+                T('figma', 'Figma', 'Figma, Inc.', 'badge-free', '免费版可用', 'fa-pen-nib', '虽然主要是 UI 设计工具，但 Figma 的灵活画布和丰富的社区资源使其也常用于绘制流程图和架构图。', ['矢量编辑', '实时协作', '社区资源', '组件系统', '插件生态', '跨平台'], ['UI设计', '矢量', '协作', '插件', '社区模板'], ['Web', 'Desktop'], '⭐ 4.7', 'https://www.figma.com', 'https://help.figma.com'),
+                T('edrawmax', 'EdrawMax（亿图图示）', 'Wondershare', 'badge-trial', '免费额度', 'fa-draw-polygon', '国产优秀流程图工具，对标 Visio，模板丰富，适合科研绘图、工程流程图及教学使用。', ['海量模板', '跨平台支持', '导入Visio文件', '思维导图支持', '符号库丰富', '一键排版'], ['国产软件', 'Visio替代', '模板丰富', '教学科研'], ['Web', 'Desktop', 'Mobile'], '⭐ 4.5', 'https://www.edrawsoft.cn/edrawmax/', 'https://www.edrawsoft.cn/help/edrawmax/'),
+                T('processon', 'ProcessOn', 'ProcessOn Inc.', 'badge-free', '免费', 'fa-share-alt', '国内知名在线作图工具，支持流程图、思维导图、原型设计，适合团队协作与教学展示。', ['在线协作', '云端存储', '流程图+思维导图', '模板社区', '导出多格式', '简单易用'], ['在线工具', '团队协作', '国产', '教学'], ['Web'], '⭐ 4.4', 'https://www.processon.com', 'https://www.processon.com/guide'),
+                T('whimsical', 'Whimsical', 'Whimsical Inc.', 'badge-trial', '免费额度', 'fa-lightbulb', '极简风格流程图与头脑风暴工具，适合快速构建逻辑结构和科研思路梳理。', ['极简设计', '实时协作', '流程图+线框图', '快速节点创建', '键盘驱动', '云端保存'], ['头脑风暴', '快速绘图', '简洁', '协作'], ['Web'], '⭐ 4.6', 'https://whimsical.com', 'https://help.whimsical.com'),
+                T('creately', 'Creately', 'Cinergix', 'badge-trial', '免费额度', 'fa-network-wired', '支持流程图、UML、ER图等多种图表类型，强调团队协作和数据驱动图表。', ['多种图表类型', '实时协作', '数据绑定', '模板丰富', '团队管理', '云端同步'], ['UML', 'ER图', '团队协作', '数据可视化'], ['Web', 'Desktop'], '⭐ 4.5', 'https://creately.com', 'https://creately.com/guides/')
+            ],
+            mindmap: [
+                T('xmind', 'XMind', 'XMind Ltd', 'badge-pro', 'Pro版', 'fa-brain', '全球最受欢迎的思维导图软件之一，丰富的结构模式和精美的导出效果，适合学术和商业演示。', ['多种结构模式', '演说模式', 'ZEN模式', '大纲视图', '丰富主题', 'Office导出'], ['思维导图', '大纲', '演示', '学术'], ['Desktop', 'Web', 'Mobile'], '⭐ 4.7', 'https://xmind.cn', 'https://xmind.cn/user-guide'),
+                T('mindmaster', 'MindMaster（亿图脑图）', 'Wondershare', 'badge-trial', '免费额度', 'fa-project-diagram', '功能全面的思维导图工具，支持多平台同步，适合科研笔记整理、论文结构设计和教学使用。', ['多种布局', '云同步', '演示模式', '甘特图', '模板社区', '导出多格式'], ['思维导图', '科研笔记', '教学', '结构化'], ['Web', 'Desktop', 'Mobile'], '⭐ 4.6', 'https://www.edrawsoft.cn/mindmaster/', 'https://www.edrawsoft.cn/help/mindmaster/'),
+                T('gitmind', 'GitMind', 'Apowersoft', 'badge-free', '免费', 'fa-sitemap', '轻量级在线思维导图工具，界面简洁，适合快速整理科研思路和课程笔记。', ['在线编辑', '自动布局', '多人协作', '导出图片/PDF', '模板丰富', '云端保存'], ['在线工具', '轻量', '学习笔记', '协作'], ['Web'], '⭐ 4.5', 'https://gitmind.com', 'https://gitmind.com/guide'),
+                T('obsidian', 'Obsidian', 'Obsidian', 'badge-open', '开源免费', 'fa-gem', '本地优先的知识管理工具，通过双链和关系图谱构建个人知识网络，Markdown 原生支持，是科研人员的强大知识管理工具。', ['双向链接', '关系图谱', 'Markdown', '本地存储', '插件生态', '双向引用'], ['知识管理', '双链笔记', '图谱', '本地存储', 'Markdown'], ['Desktop', 'Mobile'], '⭐ 4.9', 'https://obsidian.md', 'https://help.obsidian.md'),
+                T('miro', 'Miro', 'Miro', 'badge-free', '免费版', 'fa-border-all', '无限画布的在线协作白板，支持思维导图、看板、流程图等多种视图，适合头脑风暴和团队协作。', ['无限画布', '实时协作', '模板市场', '便签墙', '视频会议集成', '第三方嵌入'], ['协作白板', '无限画布', '头脑风暴', '看板'], ['Web', 'Desktop', 'Mobile'], '⭐ 4.6', 'https://miro.com', 'https://help.miro.com'),
+                T('coggle', 'Coggle', 'Coggle Ltd', 'badge-free', '免费版', 'fa-code-branch', '专注于思维导图的在线工具，支持实时协作和历史版本追踪，适合团队头脑风暴。', ['实时协作', '自动保存', '历史版本', '无限分支', '图片插入', '导出PDF'], ['协作', '在线导图', '头脑风暴', '简洁'], ['Web'], '⭐ 4.6', 'https://coggle.it', 'https://coggle.it/support'),
+                T('mindnode', 'MindNode', 'MindNode GmbH', 'badge-pro', '付费', 'fa-circle-nodes', '专为 Apple 生态设计的思维导图工具，界面优雅，操作流畅，适合深度思考与个人知识整理。', ['苹果生态', '专注模式', '大纲视图', '标签系统', '任务管理', 'iCloud同步'], ['Mac工具', '专注', '知识整理', '高颜值'], ['Mac', 'iOS'], '⭐ 4.7', 'https://mindnode.com', 'https://help.mindnode.com'),
+                T('freeplane', 'Freeplane', 'Open Source', 'badge-open', '开源免费', 'fa-leaf', '开源思维导图工具，功能强大且高度可定制，适合科研人员进行复杂知识结构整理。', ['开源免费', '高度自定义', '脚本支持', '插件扩展', '大纲模式', '轻量快速'], ['开源', '可定制', '科研工具', '知识结构'], ['Desktop'], '⭐ 4.4', 'https://www.freeplane.org', 'https://docs.freeplane.org')
+            ],
+            chart: [
+                T('origin', 'Origin', 'OriginLab', 'badge-pro', '商业软件', 'fa-chart-bar', '科研领域最专业的数据分析和绘图软件，支持 publication-quality 图表导出，广泛用于物理、化学、生物等学科。', ['统计分析', '曲线拟合', 'publication图表', '批量处理', '自定义模板', '多语言'], ['数据分析', '曲线拟合', '统计图', '论文图表', '专业'], ['Desktop'], '⭐ 4.8', 'https://www.originlab.com', 'https://www.originlab.com/pdfs/UsersGuide.pdf'),
+                T('matplotlib', 'Matplotlib', 'Open Source', 'badge-open', '开源', 'fa-chart-line', 'Python 最基础也是最经典的绘图库，几乎所有科研绘图的底层工具，适用于高精度可控的论文图表。', 
+                    ['高可定制', 'publication级图表', '与NumPy集成', '支持多种图类型', '静态导出', '社区庞大'], ['Python', '基础绘图', '科研', '高可控'], ['Python'], '⭐ 4.7', 
+                    'https://matplotlib.org', 'https://matplotlib.org/stable/users/index.html',
+                    `// 这里是 matplotlib 的代码示例
+                    # -*- coding: utf-8 -*-
+                    import matplotlib.pyplot as plt
+                    import numpy as np
+                    from matplotlib import rcParams
+
+                    # 设置中文字体支持
+                    rcParams['font.sans-serif'] = ['SimHei', 'Times New Roman']
+                    rcParams['font.size'] = 12
+                    rcParams['axes.labelsize'] = 13
+                    rcParams['axes.titlesize'] = 14
+                    rcParams['xtick.labelsize'] = 12
+                    rcParams['ytick.labelsize'] = 12
+                    rcParams['legend.fontsize'] = 12
+                    rcParams['axes.unicode_minus'] = False
+
+                    # 生成示例数据
+                    x = np.linspace(0, 10, 100)
+                    y1 = np.sin(x)
+                    y2 = np.cos(x)
+                    y3 = np.exp(-x/10) * np.sin(x)
+
+                    # 创建一个包含多个子图的图表
+                    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+                    fig.suptitle('Matplotlib 绘图示例', fontsize=20, fontweight='bold')
+
+                    # 第一个子图：基础线图
+                    ax1 = axes[0, 0]
+                    ax1.plot(x, y1, 'b-', linewidth=2, label='sin(x)')
+                    ax1.plot(x, y2, 'r--', linewidth=2, label='cos(x)')
+                    ax1.set_xlabel('X轴', fontsize=13)
+                    ax1.set_ylabel('Y轴', fontsize=13)
+                    ax1.set_title('线图示例', fontsize=14)
+                    ax1.legend(fontsize=12)
+                    ax1.grid(True, alpha=0.3)
+
+                    # 第二个子图：散点图
+                    ax2 = axes[0, 1]
+                    scatter = ax2.scatter(x[::5], y1[::5], c=y1[::5], s=100, cmap='viridis', alpha=0.6)
+                    ax2.set_xlabel('X轴', fontsize=13)
+                    ax2.set_ylabel('Y轴', fontsize=13)
+                    ax2.set_title('散点图示例', fontsize=14)
+                    cbar = plt.colorbar(scatter, ax=ax2, label='数值')
+                    cbar.set_label('数值', fontsize=13)
+                    cbar.ax.tick_params(labelsize=12)
+
+                    # 第三个子图：柱状图
+                    ax3 = axes[1, 0]
+                    categories = ['A', 'B', 'C', 'D', 'E']
+                    values = [23, 45, 56, 78, 32]
+                    bars = ax3.bar(categories, values, color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'])
+                    ax3.set_ylabel('数值', fontsize=13)
+                    ax3.set_title('柱状图示例', fontsize=14)
+                    ax3.set_ylim(0, 100)
+                    for bar in bars:
+                        height = bar.get_height()
+                        ax3.text(bar.get_x() + bar.get_width()/2., height,
+                                f'{int(height)}', ha='center', va='bottom', fontsize=12)
+
+                    # 第四个子图：填充面积图
+                    ax4 = axes[1, 1]
+                    ax4.fill_between(x, y3, alpha=0.3, color='green', label='填充区域')
+                    ax4.plot(x, y3, 'g-', linewidth=2, label='衰减正弦波')
+                    ax4.set_xlabel('X轴', fontsize=13)
+                    ax4.set_ylabel('Y轴', fontsize=13)
+                    ax4.set_title('填充面积图示例', fontsize=14)
+                    ax4.legend(fontsize=12)
+                    ax4.grid(True, alpha=0.3)
+
+                    plt.tight_layout()
+                    plt.show()`, 'Python'
+                ),
+                T('seaborn', 'Seaborn', 'Open Source', 'badge-open', '开源', 'fa-wave-square', '基于 Matplotlib 的高级统计可视化库，默认风格更美观，适合快速生成科研统计图。', 
+                    ['统计图表', '美观默认样式', '与Pandas集成', '热力图', '分布图', '回归分析'], ['Python', '统计图', '科研绘图', '数据分析'], ['Python'], '⭐ 4.6', 
+                    'https://seaborn.pydata.org', 'https://seaborn.pydata.org/tutorial.html',
+                    `// 这里是 seaborn 的代码示例
+                    # -*- coding: utf-8 -*-
+                    import seaborn as sns
+                    import matplotlib.pyplot as plt
+                    import pandas as pd
+
+                    # ==============================
+                    # 1. 全局设置
+                    # ==============================
+                    sns.set_theme(style="whitegrid")
+
+                    # 设置中文字体 (Windows用SimHei, Mac建议用Arial Unicode MS)
+                    plt.rcParams['font.sans-serif'] = ['SimHei'] 
+                    plt.rcParams['axes.unicode_minus'] = False 
+
+                    # 加载数据
+                    tips = sns.load_dataset("tips")
+
+                    # ==============================
+                    # 2. 创建大画布
+                    # ==============================
+                    plt.figure(figsize=(18, 14))
+                    # 大标题
+                    plt.suptitle("Seaborn 综合数据分析看板", fontsize=18, y=0.95)
+
+                    # ==============================
+                    # 3. 开始绘图
+                    # ==============================
+
+                    # --- 第1块：左上角 ---
+                    plt.subplot(2, 2, 1)
+                    sns.regplot(data=tips, x="total_bill", y="tip", color="teal")
+                    plt.title("总账单与小费", fontsize=14)
+                    plt.xlabel("总账单金额 ($)", fontsize=16)
+                    plt.ylabel("小费金额 ($)", fontsize=16)
+                    plt.tick_params(labelsize=14)
+
+                    # --- 第2块：右上角 ---
+                    plt.subplot(2, 2, 2)
+                    sns.barplot(data=tips, x="day", y="total_bill", hue="sex", palette="viridis", ci=None)
+                    plt.title("不同星期的平均消费", fontsize=14)
+                    plt.xlabel("星期", fontsize=16)
+                    plt.ylabel("平均消费 ($)", fontsize=16)
+                    plt.tick_params(labelsize=14)
+                    # 图例设置
+                    plt.legend(title="性别", loc='upper right', ncol=2, fontsize=14, title_fontsize=14)
+
+                    # --- 第3块：左下角 ---
+                    plt.subplot(2, 2, 3)
+                    sns.boxplot(data=tips, x="day", y="total_bill", palette="Set2")
+                    plt.title("每周总账单分布", fontsize=14)
+                    plt.xlabel("星期", fontsize=16)
+                    plt.ylabel("金额 ($)", fontsize=16)
+                    plt.tick_params(labelsize=14)
+
+                    # --- 第4块：右下角 ---
+                    plt.subplot(2, 2, 4)
+                    corr = tips.corr(numeric_only=True)
+                    sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5, annot_kws={"size": 16})
+                    plt.title("变量相关性矩阵", fontsize=14)
+                    plt.tick_params(labelsize=14)
+
+                    # ==============================
+                    # 4. 调整间距并显示
+                    # ==============================
+                    # 【关键修改】手动调整子图间距
+                    # hspace=0.35: 增加垂直方向的间距 (默认约0.2)
+                    # wspace=0.25: 增加水平方向的间距 (默认约0.2)
+                    plt.subplots_adjust(hspace=0.35, wspace=0.25)
+
+                    plt.show()`, 'Python'
+                ),
+                T('tableau', 'Tableau', 'Salesforce', 'badge-enterprise', '企业版', 'fa-chart-pie', '强大的数据可视化平台，拖拽式操作让复杂数据变得直观，支持连接各种数据源进行实时分析。', ['拖拽式界面', '实时数据', '多种图表', '数据连接', '仪表板', '故事模式'], ['数据可视化', 'BI', '仪表板', '实时数据'], ['Desktop', 'Web'], '⭐ 4.5', 'https://www.tableau.com', 'https://help.tableau.com'),
+                T('plotly', 'Plotly Python', 'Plotly', 'badge-open', '开源', 'fa-line-chart', '基于 Python 的交互式可视化库，支持 Web 端交互图表，可嵌入 Jupyter Notebook 和 HTML 报告。', ['交互图表', 'Web导出', 'Jupyter集成', '3D图表', '统计图', 'Mapbox地图'], ['Python', '交互式', 'Jupyter', 'Web图表', '开源'], ['Python', 'Web', 'R', 'Julia'], '⭐ 4.6', 'https://plotly.com/python', 'https://plotly.com/python-api-reference'),
+                T('echarts', 'Apache ECharts', 'Apache', 'badge-open', '开源', 'fa-chart-area', '百度开源的强大前端可视化库，适合构建高交互性 Web 图表和科研展示页面。', ['高交互', 'Web可视化', '动画效果', '多图表支持', '自定义主题', '大数据支持'], ['前端', 'Web图表', '可视化', '交互'], ['Web'], '⭐ 4.7', 'https://echarts.apache.org', 'https://echarts.apache.org/handbook/'),
+                T('rawgraphs', 'RAWGraphs', 'RAWLabs', 'badge-free', '免费在线', 'fa-chart-area', '开源的数据可视化在线工具，通过简单拖拽操作将数据转换为精美矢量图表，适合快速探索和原型设计。', ['拖拽操作', '矢量导出', '多种图表', '无需注册', '隐私保护', 'GitHub开源'], ['在线工具', '矢量导出', '原型设计', '隐私保护'], ['Web'], '⭐ 4.4', 'https://www.rawgraphs.io', 'https://rawgraphs.io/learning'),
+                T('excel', 'Microsoft Excel', 'Microsoft', 'badge-basic', '常用工具', 'fa-file-excel', '最常用的数据处理与绘图工具之一，适合快速生成基础图表，在科研初期数据整理中非常实用。', ['表格处理', '基础图表', '数据清洗', '函数支持', '广泛普及', '易上手'], ['入门', '基础图表', '数据处理', 'Office'], ['Desktop', 'Web'], '⭐ 4.3', 'https://www.microsoft.com/excel', 'https://support.microsoft.com/excel')
+            ],
+            '3dmodel': [
+                T('solidworks', 'SolidWorks', 'Dassault Systèmes', 'badge-pro', '工业标准', 'fa-cube', '机械设计领域最主流的 3D CAD 软件之一，广泛应用于产品设计、装配建模和工程分析。', ['参数化建模', '装配设计', '工程图', '仿真分析', '渲染', '插件生态'], ['机械设计', 'CAD', '工业设计', '装配'], ['Desktop'], '⭐ 4.7', 'https://www.solidworks.com', 'https://help.solidworks.com'),
+                T('autocad', 'AutoCAD', 'Autodesk', 'badge-pro', '行业标准', 'fa-drafting-compass', '最经典的工程制图软件，支持 2D 绘图与基础 3D 建模，是建筑、机械、电气等领域的基础工具。', ['2D制图', '基础3D建模', 'DWG标准', '精确标注', '图层管理', '跨行业应用'], ['CAD', '工程制图', '建筑', '机械'], ['Desktop', 'Web'], '⭐ 4.6', 'https://www.autodesk.com/products/autocad', 'https://help.autodesk.com'),
+                T('creo', 'PTC Creo', 'PTC', 'badge-pro', '高端CAD', 'fa-cogs', '高端参数化 CAD 软件，适用于复杂产品设计和工程仿真，广泛用于航空航天与高端制造。', ['参数化建模', '拓扑优化', '仿真分析', '装配设计', '复杂曲面', 'PLM集成'], ['高端CAD', '复杂建模', '航空航天', '仿真'], ['Desktop'], '⭐ 4.6', 'https://www.ptc.com/en/products/creo', 'https://support.ptc.com'),
+                T('nx', 'Siemens NX (UG)', 'Siemens', 'badge-pro', '工业级', 'fa-industry', '原 UG 软件，集 CAD/CAE/CAM 于一体的高端工业软件，适用于复杂工程设计与制造一体化。', ['CAD/CAE/CAM一体', '复杂曲面', '仿真分析', '数控加工', '产品生命周期管理', '高端制造'], ['UG', 'NX', '工业设计', '制造一体化'], ['Desktop'], '⭐ 4.7', 'https://www.plm.automation.siemens.com', 'https://docs.plm.automation.siemens.com'),
+                T('catia', 'CATIA', 'Dassault Systèmes', 'badge-pro', '顶级工业', 'fa-plane', '航空航天和汽车工业核心 CAD 软件，支持复杂曲面建模和系统级产品设计。', ['曲面建模', '系统设计', '装配设计', '仿真分析', 'PLM集成', '工业级精度'], ['航空航天', '汽车工业', '高端CAD', '曲面建模'], ['Desktop'], '⭐ 4.8', 'https://www.3ds.com/products-services/catia', 'https://help.3ds.com'),
+                T('caxa', 'CAXA CAD', 'CAXA', 'badge-basic', '国产', 'fa-pencil-ruler', '国产 CAD 软件，兼容 AutoCAD 生态，适用于机械设计和工程制图，性价比较高。', ['CAD制图', 'DWG兼容', '机械设计', '国产替代', '轻量', '易上手'], ['国产CAD', '工程制图', '机械设计'], ['Desktop'], '⭐ 4.3', 'https://www.caxa.com', 'https://www.caxa.com/support'),
+                T('blender', 'Blender', 'Blender Foundation', 'badge-open', '开源免费', 'fa-cube', '功能完备的开源 3D 创作套件，支持建模、雕刻、动画、渲染等全流程，可用于创建科研 3D 示意图和动画。', ['建模', '雕刻', '动画', '渲染引擎', '粒子系统', 'Python脚本'], ['3D建模', '渲染', '动画', '开源', '全流程'], ['Desktop'], '⭐ 4.8', 'https://www.blender.org', 'https://docs.blender.org'),
+                T('cinema4d', 'Cinema 4D (C4D)', 'Maxon', 'badge-pro', '创意设计', 'fa-film', '专业三维建模与动画软件，广泛用于科研可视化、动画演示和高质量渲染。', ['建模', '动画', '渲染', '运动图形', '材质系统', '可视化表现'], ['动画', '渲染', '视觉设计', '科研展示'], ['Desktop'], '⭐ 4.7', 'https://www.maxon.net/cinema-4d', 'https://help.maxon.net')
+            ],
+            code: [
+                T('matlab', 'MATLAB', 'MathWorks', 'badge-pro', '商业软件', 'fa-wave-square', '工程与科研领域最常用的数值计算与绘图平台之一，内置强大的二维和三维绘图能力。', 
+                ['2D/3D绘图', '矩阵计算', '工具箱丰富', '仿真支持', 'GUI绘图', 'Simulink集成'], ['MATLAB', '科研绘图', '数值计算', '工程'], ['Desktop'], '⭐ 4.7', 
+                'https://www.mathworks.com/products/matlab.html', 'https://www.mathworks.com/help/matlab/',
+                `// 这里是 MATLAB 的代码示例
+                    % ==========================================
+                    % 1. 环境设置
+                    % ==========================================
+                    opengl software; % 解决白屏/渲染问题
+                    clc; clear; close all;
+
+                    % 加载数据
+                    load patients
+                    load carsmall
+
+                    % ==========================================
+                    % 2. 创建画布
+                    % ==========================================
+                    figure('Name', 'MATLAB Dashboard', 'Color', 'w', 'Position', [100, 100, 1200, 900]); 
+                    sgtitle('MATLAB 综合数据分析看板', 'FontSize', 18);
+
+                    % --- 子图 1 (左上) ---
+                    subplot(2, 2, 1);
+                    non_smoker_idx = find(~Smoker);
+                    x1 = Weight(non_smoker_idx);
+                    y1 = Diastolic(non_smoker_idx);
+
+                    % 【修正点】使用 RGB 三元组 [0 0.5 0.5] 代替 'teal'
+                    scatter(x1, y1, 40, [0 0.5 0.5], 'filled'); hold on;
+
+                    % 拟合线
+                    p = polyfit(x1, y1, 1);
+                    y_fit = polyval(p, x1);
+                    plot(x1, y_fit, 'k-', 'LineWidth', 2);
+
+                    title('体重与舒张压');
+                    xlabel('体重 (lbs)'); ylabel('舒张压 (mm Hg)');
+                    grid on;
+
+                    % --- 子图 2 (右上) ---
+                    subplot(2, 2, 2);
+                    origin_groups = unique(Origin);
+                    mpg_means = grpstats(MPG, Origin, 'mean');
+                    bar(mpg_means, 'FaceColor', [0.3 0.4 0.8]);
+                    title('不同产地平均油耗');
+                    xlabel('产地'); ylabel('MPG');
+                    grid on;
+
+                    % --- 子图 3 (左下) ---
+                    subplot(2, 2, 3);
+
+                    % 提取数据
+                    w_male = Weight(strcmp(Gender, 'Male'));
+                    w_female = Weight(strcmp(Gender, 'Female'));
+
+                    % 补齐长度并转为矩阵
+                    len_m = length(w_male);
+                    len_f = length(w_female);
+                    max_len = max(len_m, len_f);
+                    data_matrix = NaN(max_len, 2); 
+                    data_matrix(1:len_m, 1) = w_male;
+                    data_matrix(1:len_f, 2) = w_female;
+
+                    % 绘图
+                    boxchart(data_matrix);
+                    title('性别体重分布');
+                    xlabel('性别'); 
+                    ylabel('体重 (lbs)');
+                    grid on;
+
+                    % --- 子图 4 (右下) ---
+                    subplot(2, 2, 4);
+                    data_corr = [Age, Weight, Diastolic, Systolic];
+                    corr_matrix = corr(data_corr);
+                    var_names = {'Age', 'Weight', 'Diastolic', 'Systolic'};
+                    h = heatmap(corr_matrix, 'XDisplayLabels', var_names, 'YDisplayLabels', var_names, 'Colormap', parula);
+                    title('相关性矩阵');
+
+                    % 自动调整布局
+                    sgtitle('MATLAB 综合数据分析看板', 'FontSize', 18);`, 'MATLAB'
+                ),
+                T('matplotlib_py', 'Matplotlib (Python)', 'Open Source', 'badge-open', '开源', 'fa-chart-line', 'Python 最基础的绘图库，支持高度自定义的科研图表，是论文绘图的核心工具之一。', 
+                ['高可控', 'publication级图表', '多图类型', '与NumPy/Pandas集成', '导出SVG/PDF', '子图布局'], ['Python', '科研绘图', '基础库', '可定制'], ['Python'], '⭐ 4.7', 
+                'https://matplotlib.org', 'https://matplotlib.org/stable/users/index.html',
+                `// 这里是 matplotlib 的代码示例
+                    # -*- coding: utf-8 -*-
+                    import matplotlib.pyplot as plt
+                    import numpy as np
+                    from matplotlib import rcParams
+
+                    # 设置中文字体支持
+                    rcParams['font.sans-serif'] = ['SimHei', 'Times New Roman']
+                    rcParams['font.size'] = 12
+                    rcParams['axes.labelsize'] = 13
+                    rcParams['axes.titlesize'] = 14
+                    rcParams['xtick.labelsize'] = 12
+                    rcParams['ytick.labelsize'] = 12
+                    rcParams['legend.fontsize'] = 12
+                    rcParams['axes.unicode_minus'] = False
+
+                    # 生成示例数据
+                    x = np.linspace(0, 10, 100)
+                    y1 = np.sin(x)
+                    y2 = np.cos(x)
+                    y3 = np.exp(-x/10) * np.sin(x)
+
+                    # 创建一个包含多个子图的图表
+                    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+                    fig.suptitle('Matplotlib 绘图示例', fontsize=20, fontweight='bold')
+
+                    # 第一个子图：基础线图
+                    ax1 = axes[0, 0]
+                    ax1.plot(x, y1, 'b-', linewidth=2, label='sin(x)')
+                    ax1.plot(x, y2, 'r--', linewidth=2, label='cos(x)')
+                    ax1.set_xlabel('X轴', fontsize=13)
+                    ax1.set_ylabel('Y轴', fontsize=13)
+                    ax1.set_title('线图示例', fontsize=14)
+                    ax1.legend(fontsize=12)
+                    ax1.grid(True, alpha=0.3)
+
+                    # 第二个子图：散点图
+                    ax2 = axes[0, 1]
+                    scatter = ax2.scatter(x[::5], y1[::5], c=y1[::5], s=100, cmap='viridis', alpha=0.6)
+                    ax2.set_xlabel('X轴', fontsize=13)
+                    ax2.set_ylabel('Y轴', fontsize=13)
+                    ax2.set_title('散点图示例', fontsize=14)
+                    cbar = plt.colorbar(scatter, ax=ax2, label='数值')
+                    cbar.set_label('数值', fontsize=13)
+                    cbar.ax.tick_params(labelsize=12)
+
+                    # 第三个子图：柱状图
+                    ax3 = axes[1, 0]
+                    categories = ['A', 'B', 'C', 'D', 'E']
+                    values = [23, 45, 56, 78, 32]
+                    bars = ax3.bar(categories, values, color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'])
+                    ax3.set_ylabel('数值', fontsize=13)
+                    ax3.set_title('柱状图示例', fontsize=14)
+                    ax3.set_ylim(0, 100)
+                    for bar in bars:
+                        height = bar.get_height()
+                        ax3.text(bar.get_x() + bar.get_width()/2., height,
+                                f'{int(height)}', ha='center', va='bottom', fontsize=12)
+
+                    # 第四个子图：填充面积图
+                    ax4 = axes[1, 1]
+                    ax4.fill_between(x, y3, alpha=0.3, color='green', label='填充区域')
+                    ax4.plot(x, y3, 'g-', linewidth=2, label='衰减正弦波')
+                    ax4.set_xlabel('X轴', fontsize=13)
+                    ax4.set_ylabel('Y轴', fontsize=13)
+                    ax4.set_title('填充面积图示例', fontsize=14)
+                    ax4.legend(fontsize=12)
+                    ax4.grid(True, alpha=0.3)
+
+                    plt.tight_layout()
+                    plt.show()`, 'Python'
+                ),
+                T('seaborn_py', 'Seaborn (Python)', 'Open Source', 'badge-open', '开源', 'fa-chart-area', '基于 Matplotlib 的高级可视化库，适合快速生成美观的统计图表，常用于论文数据分析。', 
+                ['统计图', '默认美观', '热力图', '分布图', '回归图', 'Pandas集成'], ['Python', '统计绘图', '科研', '数据分析'], ['Python'], '⭐ 4.6', 
+                'https://seaborn.pydata.org', 'https://seaborn.pydata.org/tutorial.html',
+                `// 这里是 seaborn 的代码示例
+                    # -*- coding: utf-8 -*-
+                    import seaborn as sns
+                    import matplotlib.pyplot as plt
+                    import pandas as pd
+
+                    # ==============================
+                    # 1. 全局设置
+                    # ==============================
+                    sns.set_theme(style="whitegrid")
+
+                    # 设置中文字体 (Windows用SimHei, Mac建议用Arial Unicode MS)
+                    plt.rcParams['font.sans-serif'] = ['SimHei'] 
+                    plt.rcParams['axes.unicode_minus'] = False 
+
+                    # 加载数据
+                    tips = sns.load_dataset("tips")
+
+                    # ==============================
+                    # 2. 创建大画布
+                    # ==============================
+                    plt.figure(figsize=(18, 14))
+                    # 大标题
+                    plt.suptitle("Seaborn 综合数据分析看板", fontsize=18, y=0.95)
+
+                    # ==============================
+                    # 3. 开始绘图
+                    # ==============================
+
+                    # --- 第1块：左上角 ---
+                    plt.subplot(2, 2, 1)
+                    sns.regplot(data=tips, x="total_bill", y="tip", color="teal")
+                    plt.title("总账单与小费", fontsize=14)
+                    plt.xlabel("总账单金额 ($)", fontsize=16)
+                    plt.ylabel("小费金额 ($)", fontsize=16)
+                    plt.tick_params(labelsize=14)
+
+                    # --- 第2块：右上角 ---
+                    plt.subplot(2, 2, 2)
+                    sns.barplot(data=tips, x="day", y="total_bill", hue="sex", palette="viridis", ci=None)
+                    plt.title("不同星期的平均消费", fontsize=14)
+                    plt.xlabel("星期", fontsize=16)
+                    plt.ylabel("平均消费 ($)", fontsize=16)
+                    plt.tick_params(labelsize=14)
+                    # 图例设置
+                    plt.legend(title="性别", loc='upper right', ncol=2, fontsize=14, title_fontsize=14)
+
+                    # --- 第3块：左下角 ---
+                    plt.subplot(2, 2, 3)
+                    sns.boxplot(data=tips, x="day", y="total_bill", palette="Set2")
+                    plt.title("每周总账单分布", fontsize=14)
+                    plt.xlabel("星期", fontsize=16)
+                    plt.ylabel("金额 ($)", fontsize=16)
+                    plt.tick_params(labelsize=14)
+
+                    # --- 第4块：右下角 ---
+                    plt.subplot(2, 2, 4)
+                    corr = tips.corr(numeric_only=True)
+                    sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5, annot_kws={"size": 16})
+                    plt.title("变量相关性矩阵", fontsize=14)
+                    plt.tick_params(labelsize=14)
+
+                    # ==============================
+                    # 4. 调整间距并显示
+                    # ==============================
+                    # 【关键修改】手动调整子图间距
+                    # hspace=0.35: 增加垂直方向的间距 (默认约0.2)
+                    # wspace=0.25: 增加水平方向的间距 (默认约0.2)
+                    plt.subplots_adjust(hspace=0.35, wspace=0.25)
+
+                    plt.show()`, 'Python'
+                ),
+                T('jfreechart', 'JFreeChart (Java)', 'JFree', 'badge-open', '开源', 'fa-chart-bar', 'Java 平台经典绘图库，支持多种图表类型，适合开发科研或工程类 Java 应用中的数据可视化模块。', 
+                ['多图类型', 'Swing集成', '导出PNG/PDF', '实时更新', '自定义图表', '成熟稳定'], ['Java', '图表库', '桌面应用', '可视化'], ['Java'], '⭐ 4.3', 
+                'https://www.jfree.org/jfreechart/', 'https://www.jfree.org/jfreechart/api/javadoc/',
+                `// 这里是 jfreechart 的代码示例
+                    import org.jfree.chart.*;
+                    import org.jfree.chart.axis.NumberAxis;
+                    import org.jfree.chart.block.BlockBorder;
+                    import org.jfree.chart.plot.*;
+                    import org.jfree.chart.renderer.PaintScale;
+                    import org.jfree.chart.renderer.GrayPaintScale;
+                    import org.jfree.chart.renderer.LookupPaintScale;
+                    import org.jfree.chart.renderer.xy.XYBlockRenderer;
+                    import org.jfree.chart.title.PaintScaleLegend;
+                    import org.jfree.data.statistics.BoxAndWhiskerXYDataset;
+                    import org.jfree.data.statistics.DefaultBoxAndWhiskerXYDataset;
+                    import org.jfree.data.xy.*;
+                    import org.jfree.data.general.DatasetUtilities;
+                    import org.jfree.ui.RectangleEdge;
+                    import org.jfree.ui.RectangleInsets;
+
+                    import javax.swing.*;
+                    import java.awt.*;
+                    import java.util.ArrayList;
+                    import java.util.List;
+                    import java.util.Random;
+
+                    public class JFreeChartGallery extends JFrame {
+
+                        public JFreeChartGallery() {
+                            super("JFreeChart 综合示例");
+                            this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+                            this.setLayout(new GridLayout(2, 2, 10, 10));
+                            this.setSize(1200, 900);
+
+                            // 1. 创建散点图
+                            JFreeChart scatterChart = createScatterChart();
+                            this.add(new ChartPanel(scatterChart));
+
+                            // 2. 创建热力图
+                            JFreeChart heatmapChart = createHeatmapChart();
+                            this.add(new ChartPanel(heatmapChart));
+
+                            // 3. 创建箱线图
+                            JFreeChart boxplotChart = createBoxplotChart();
+                            this.add(new ChartPanel(boxplotChart));
+
+                            // 4. 创建直方图
+                            JFreeChart histogramChart = createHistogramChart();
+                            this.add(new ChartPanel(histogramChart));
+                        }
+
+                        /**
+                         * 1. 散点图
+                         */
+                        private JFreeChart createScatterChart() {
+                            XYSeries series = new XYSeries("Iris-Setosa");
+                            // 模拟一些数据，类似鸢尾花数据集
+                            for (int i = 0; i < 50; i++) {
+                                double x = 4.0 + Math.random() * 2.0; // 模拟花瓣长度
+                                double y = 1.0 + Math.random() * 1.5; // 模拟花瓣宽度
+                                series.add(x, y);
+                            }
+                            
+                            XYSeries series2 = new XYSeries("Iris-Versicolor");
+                            for (int i = 0; i < 50; i++) {
+                                double x = 5.0 + Math.random() * 2.0;
+                                double y = 2.5 + Math.random() * 1.5;
+                                series2.add(x, y);
+                            }
+
+                            XYSeriesCollection dataset = new XYSeriesCollection();
+                            dataset.addSeries(series);
+                            dataset.addSeries(series2);
+
+                            return ChartFactory.createScatterPlot(
+                                    "鸢尾花花瓣特征散点图",
+                                    "花瓣长度 (cm)",
+                                    "花瓣宽度 (cm)",
+                                    dataset,
+                                    PlotOrientation.VERTICAL,
+                                    true, true, false
+                            );
+                        }
+
+                        /**
+                         * 2. 热力图
+                         * JFreeChart 没有直接的 "Heatmap" 工厂方法，需要使用 XYBlockRenderer
+                         */
+                        private JFreeChart createHeatmapChart() {
+                            int rows = 20;
+                            int cols = 20;
+                            DefaultHeatMapDataset dataset = new DefaultHeatMapDataset(cols, rows);
+                            
+                            // 生成模拟的相关性数据
+                            for (int x = 0; x < cols; x++) {
+                                for (int y = 0; y < rows; y++) {
+                                    // 模拟一个中心高、四周低的相关性矩阵
+                                    double val = Math.exp(-0.1 * ((x - 10) * (x - 10) + (y - 10) * (y - 10)));
+                                    dataset.updateZValue(val, x, y);
+                                }
+                            }
+
+                            // 使用 GrayPaintScale 或者自定义 PaintScale
+                            PaintScale scale = new GrayPaintScale(0.0, 1.0);
+                            
+                            XYBlockRenderer renderer = new XYBlockRenderer();
+                            renderer.setPaintScale(scale);
+                            
+                            NumberAxis xAxis = new NumberAxis("X", 0.0, cols * 1.0);
+                            NumberAxis yAxis = new NumberAxis("Y", 0.0, rows * 1.0);
+                            
+                            XYPlot plot = new XYPlot(dataset, xAxis, yAxis, renderer);
+                            plot.setAxisOffset(new RectangleInsets(5.0, 5.0, 5.0, 5.0));
+
+                            JFreeChart chart = new JFreeChart("相关性模拟热力图", plot);
+                            
+                            // 添加颜色条图例
+                            NumberAxis scaleAxis = new NumberAxis("Value");
+                            PaintScaleLegend legend = new PaintScaleLegend(new GrayPaintScale(0.0, 1.0), scaleAxis);
+                            legend.setStripOutline(false);
+                            chart.addSubtitle(legend);
+                            ChartUtilities.applyCurrentTheme(chart);
+                            
+                            return chart;
+                        }
+
+                        /**
+                         * 3. 箱线图
+                         */
+                        private JFreeChart createBoxplotChart() {
+                            DefaultBoxAndWhiskerXYDataset dataset = new DefaultBoxAndWhiskerXYDataset();
+                            
+                            // 模拟不同类别的数据 (例如：不同星期的小费)
+                            String[] categories = {"Mon", "Tue", "Wed", "Thu"};
+                            Random random = new Random();
+
+                            for (String category : categories) {
+                                List<Number> data = new ArrayList<>();
+                                for (int i = 0; i < 20; i++) {
+                                    // 生成随机数据，模拟小费金额
+                                    data.add(10 + random.nextDouble() * 20 + (category.equals("Thu") ? 5 : 0));
+                                }
+                                dataset.addSeries(category, data);
+                            }
+
+                            CategoryPlot plot = new CategoryPlot();
+                            plot.setDataset(dataset);
+                            plot.setRenderer(new BoxAndWhiskerRenderer());
+                            plot.setDomainAxis(new CategoryAxis("Day"));
+                            plot.setRangeAxis(new NumberAxis("Total Bill"));
+
+                            JFreeChart chart = new JFreeChart("每日小费总额箱线图", chartTitleFont, plot, true);
+                            ChartUtilities.applyCurrentTheme(chart);
+                            return chart;
+                        }
+
+                        /**
+                         * 4. 直方图
+                         */
+                        private JFreeChart createHistogramChart() {
+                            // 生成模拟数据
+                            double[] data = new double[200];
+                            Random random = new Random();
+                            for (int i = 0; i < data.length; i++) {
+                                data[i] = random.nextGaussian() * 5 + 20; // 正态分布数据
+                            }
+
+                            // 创建直方图数据集
+                            // 注意：JFreeChart 的直方图通常使用 HistogramDataset
+                            // 但为了简单展示，这里使用 JFreeChart 的内置工厂方法，它接受一个 double[]
+                            // 实际上更推荐使用 HistogramDataset 来精细控制 bins
+                            
+                            // 这里我们手动构建一个 XYPlot 来模拟直方图效果，或者使用 ChartFactory
+                            // 为了代码简洁，我们使用 ChartFactory.createHistogram (但这通常需要 XYDataset)
+                            // 下面是一种简单的实现方式：
+                            
+                            HistogramDataset dataset = new HistogramDataset();
+                            dataset.addSeries("Frequency", data, 20); // 20个分箱
+
+                            JFreeChart chart = ChartFactory.createHistogram(
+                                    "数据分布直方图",
+                                    "Value",
+                                    "Count",
+                                    dataset,
+                                    PlotOrientation.VERTICAL,
+                                    true, true, false
+                            );
+                            
+                            // 设置颜色
+                            XYPlot plot = (XYPlot) chart.getPlot();
+                            XYBarRenderer renderer = (XYBarRenderer) plot.getRenderer();
+                            renderer.setBarPainter(new StandardXYBarPainter());
+                            renderer.setShadowVisible(false);
+                            plot.getRenderer().setSeriesPaint(0, Color.decode("#87CEEB")); // SkyBlue
+                            
+                            return chart;
+                        }
+
+                        public static void main(String[] args) {
+                            SwingUtilities.invokeLater(() -> {
+                                JFreeChartGallery example = new JFreeChartGallery();
+                                example.setVisible(true);
+                            });
+                        }
+                    }`, 'Java'
+                ),
+                T('qtcharts', 'Qt Charts (C++)', 'Qt', 'badge-open', '开源/商业', 'fa-chart-line', 'Qt 框架下的 C++ 绘图库，适用于开发高性能桌面应用中的数据可视化界面。', 
+                ['C++支持', '实时绘图', '高性能', 'Qt集成', '交互图表', '动画支持'], ['C++', 'Qt', '实时绘图', '桌面应用'], ['C++'], '⭐ 4.4', 
+                'https://doc.qt.io/qt-6/qtcharts-index.html', 'https://doc.qt.io/qt-6/qtcharts-index.html',
+                `// 这里是 qtcharts 的代码示例
+                    #include <QApplication>
+                    #include <QMainWindow>
+                    #include <QTabWidget>
+                    #include <QWidget>
+                    #include <QtCharts>
+                    #include <QVector>
+                    #include <QRandomGenerator>
+
+                    QT_CHARTS_USE_NAMESPACE
+
+                    // 模拟数据生成辅助函数
+                    QVector<qreal> generateRandomData(int count, qreal min, qreal max) {
+                        QVector<qreal> data;
+                        for (int i = 0; i < count; ++i) {
+                            data << (min + QRandomGenerator::global()->bounded(max - min));
+                        }
+                        return data;
+                    }
+
+                    int main(int argc, char *argv[])
+                    {
+                        QApplication a(argc, argv);
+
+                        QMainWindow window;
+                        window.setWindowTitle("QtCharts 综合示例 (仿 Seaborn)");
+                        window.resize(1000, 800);
+
+                        // 使用 TabWidget 分页展示四幅图
+                        QTabWidget *tabWidget = new QTabWidget(&window);
+
+                        // -----------------------------------------------------------
+                        // 1. 散点图 (Scatter Plot)
+                        // -----------------------------------------------------------
+                        QWidget *tab1 = new QWidget();
+                        QVBoxLayout *layout1 = new QVBoxLayout(tab1);
+                        
+                        QChart *chart1 = new QChart();
+                        chart1->setTitle("鸢尾花特征散点图 (模拟)");
+                        
+                        QScatterSeries *series1 = new QScatterSeries();
+                        series1->setName("Setosa");
+                        series1->setMarkerShape(QScatterSeries::MarkerShapeCircle);
+                        series1->setMarkerSize(10);
+                        series1->setColor(Qt::blue);
+
+                        // 模拟数据：x=花萼长度, y=花萼宽度
+                        for(int i=0; i<50; ++i) series1->append(5.0 + QRandomGenerator::global()->bounded(100)/100.0, 3.5 + QRandomGenerator::global()->bounded(50)/100.0);
+
+                        QScatterSeries *series2 = new QScatterSeries();
+                        series2->setName("Versicolor");
+                        series2->setMarkerShape(QScatterSeries::MarkerShapeRectangle);
+                        series2->setMarkerSize(10);
+                        series2->setColor(Qt::red);
+                        
+                        for(int i=0; i<50; ++i) series2->append(6.0 + QRandomGenerator::global()->bounded(100)/100.0, 2.5 + QRandomGenerator::global()->bounded(50)/100.0);
+
+                        chart1->addSeries(series1);
+                        chart1->addSeries(series2);
+                        chart1->createDefaultAxes();
+                        chart1->axes(Qt::Horizontal).first()->setTitleText("花萼长度 (cm)");
+                        chart1->axes(Qt::Vertical).first()->setTitleText("花萼宽度 (cm)");
+
+                        QChartView *view1 = new QChartView(chart1);
+                        view1->setRenderHint(QPainter::Antialiasing);
+                        layout1->addWidget(view1);
+                        tabWidget->addTab(tab1, "1. 散点图");
+
+                        // -----------------------------------------------------------
+                        // 2. 热力图 (Heatmap) - 使用 QBarSeries 模拟矩阵
+                        // -----------------------------------------------------------
+                        QWidget *tab2 = new QWidget();
+                        QVBoxLayout *layout2 = new QVBoxLayout(tab2);
+                        
+                        QChart *chart2 = new QChart();
+                        chart2->setTitle("相关性矩阵热力图 (模拟)");
+                        chart2->setAnimationOptions(QChart::SeriesAnimations);
+
+                        QBarSeries *heatmapSeries = new QBarSeries();
+                        
+                        // 模拟 10x10 的相关性矩阵数据
+                        int matrixSize = 10;
+                        QStringList categories;
+                        for(int i=0; i<matrixSize; ++i) categories << QString::number(i+1);
+
+                        for (int y = 0; y < matrixSize; ++y) {
+                            QBarSet *set = new QBarSet(QString("Row %1").arg(y));
+                            for (int x = 0; x < matrixSize; ++x) {
+                                // 模拟对角线数值高，周围数值低
+                                qreal val = 1.0 / (1.0 + 0.2 * (x-y)*(x-y)); 
+                                *set << val;
+                            }
+                            heatmapSeries->append(set);
+                        }
+
+                        chart2->addSeries(heatmapSeries);
+                        
+                        QBarCategoryAxis *axisX = new QBarCategoryAxis();
+                        axisX->append(categories);
+                        chart2->addAxis(axisX, Qt::AlignBottom);
+                        heatmapSeries->attachAxis(axisX);
+
+                        QValueAxis *axisY = new QValueAxis(); // 这里为了简单用了 ValueAxis，实际热力图通常行列都是分类
+                        axisY->setRange(0, 1.0);
+                        chart2->addAxis(axisY, Qt::AlignLeft);
+                        // 注意：QBarSeries 默认横轴是分类，纵轴是数值。
+                        // 要完全模拟热力图（横纵都是分类），QtCharts 比较麻烦，这里用堆叠柱状图或普通柱状图近似展示数据分布。
+                        
+                        chart2->legend()->setVisible(true);
+                        chart2->legend()->setAlignment(Qt::AlignRight);
+
+                        QChartView *view2 = new QChartView(chart2);
+                        view2->setRenderHint(QPainter::Antialiasing);
+                        layout2->addWidget(view2);
+                        tabWidget->addTab(tab2, "2. 热力图(模拟)");
+
+                        // -----------------------------------------------------------
+                        // 3. 箱线图 (Box Plot) - 使用 QBoxPlotSeries
+                        // -----------------------------------------------------------
+                        QWidget *tab3 = new QWidget();
+                        QVBoxLayout *layout3 = new QVBoxLayout(tab3);
+
+                        QChart *chart3 = new QChart();
+                        chart3->setTitle("每日小费总额箱线图");
+
+                        QBoxPlotSeries *boxSeries = new QBoxPlotSeries();
+                        
+                        // 模拟周一到周四的数据
+                        QStringList days;
+                        for(int i=0; i<4; ++i) days << QString("Day %1").arg(i+1);
+
+                        for (int i = 0; i < 4; ++i) {
+                            QBoxSet *boxSet = new QBoxSet();
+                            // 设置箱线图的五个值：最小值, 下四分位数, 中位数, 上四分位数, 最大值
+                            boxSet->setLowerWhisker(10 + i);
+                            boxSet->setLowerQuartile(15 + i);
+                            boxSet->setMedian(20 + i);
+                            boxSet->setUpperQuartile(25 + i);
+                            boxSet->setUpperWhisker(30 + i);
+                            boxSeries->append(boxSet);
+                        }
+
+                        chart3->addSeries(boxSeries);
+                        
+                        QBarCategoryAxis *axisX3 = new QBarCategoryAxis();
+                        axisX3->append(days);
+                        chart3->addAxis(axisX3, Qt::AlignBottom);
+                        boxSeries->attachAxis(axisX3);
+
+                        QChartView *view3 = new QChartView(chart3);
+                        view3->setRenderHint(QPainter::Antialiasing);
+                        layout3->addWidget(view3);
+                        tabWidget->addTab(tab3, "3. 箱线图");
+
+                        // -----------------------------------------------------------
+                        // 4. 直方图 (Histogram) - 使用 QBarSeries
+                        // -----------------------------------------------------------
+                        QWidget *tab4 = new QWidget();
+                        QVBoxLayout *layout4 = new QVBoxLayout(tab4);
+
+                        QChart *chart4 = new QChart();
+                        chart4->setTitle("数据分布直方图");
+
+                        QBarSeries *histSeries = new QBarSeries();
+                        QBarSet *histSet = new QBarSet("Frequency");
+
+                        // 生成正态分布模拟数据并统计频率 (简单的分箱逻辑)
+                        int bins = 20;
+                        QVector<int> counts(bins, 0);
+                        for(int i=0; i<200; ++i) {
+                            // 简单的正态分布模拟
+                            qreal val = (QRandomGenerator::global()->bounded(1000) / 100.0); 
+                            int binIndex = qBound(0, (int)(val / 5), bins - 1);
+                            counts[binIndex]++;
+                        }
+
+                        for(int i=0; i<bins; ++i) {
+                            *histSet << counts[i];
+                        }
+                        histSeries->append(histSet);
+
+                        chart4->addSeries(histSeries);
+                        chart4->setAnimationOptions(QChart::SeriesAnimations);
+
+                        QBarCategoryAxis *axisX4 = new QBarCategoryAxis();
+                        QStringList binLabels;
+                        for(int i=0; i<bins; i+=2) binLabels << QString::number(i*5); // 简化标签
+                        axisX4->append(binLabels); // 注意：这里标签数量和数据点数量最好对应，仅为演示
+                        chart4->addAxis(axisX4, Qt::AlignBottom);
+                        histSeries->attachAxis(axisX4);
+
+                        QChartView *view4 = new QChartView(chart4);
+                        view4->setRenderHint(QPainter::Antialiasing);
+                        layout4->addWidget(view4);
+                        tabWidget->addTab(tab4, "4. 直方图");
+
+                        window.setCentralWidget(tabWidget);
+                        window.show();
+
+                        return a.exec();
+                    }`, 'C/C++'
+                ),
+                T('gnuplot', 'Gnuplot', 'Open Source', 'badge-open', '开源', 'fa-chart-scatter', '经典命令行绘图工具，支持多语言调用，广泛用于科研数据可视化。', ['命令行绘图', '多语言支持', '2D/3D图', '脚本化', '高精度输出', '轻量快速'], ['跨语言', '命令行', '科研绘图', '轻量'], ['Desktop'], '⭐ 4.5', 'http://www.gnuplot.info', 'http://www.gnuplot.info/documentation.html'),
+                T('mermaid', 'Mermaid', 'KnSV / Mermaid', 'badge-open', '开源', 'fa-code-branch', '通过简单文本描述生成流程图、时序图、甘特图等的 Markdown 图表工具。', ['Markdown集成', '流程图', '时序图', '甘特图', '类图', 'GitHub支持'], ['Markdown', 'DSL', '流程图', '时序图', 'GitHub集成'], ['Web', 'VSCode插件', 'Markdown编辑器'], '⭐ 4.7', 'https://mermaid.js.org', 'https://mermaid.js.org/intro'),
+                T('plantuml', 'PlantUML', 'PlantUML Community', 'badge-open', '开源免费', 'fa-project-diagram', '通过文本描述生成 UML 图的强大工具，支持类图、时序图、用例图、活动图等。', ['全UML类型', '时序图', '架构图', '部署图', 'Server集成', '多格式导出'], ['UML', '架构图', '时序图', 'DSL', '文本绘图'], ['Java', 'VSCode插件', 'Web', 'Server'], '⭐ 4.6', 'https://plantuml.com', 'https://plantuml.com/guide')
+            ],
+            sim: [
+                T('ansys', 'ANSYS', 'Ansys, Inc.', 'badge-enterprise', '工业标准', 'fa-wind', '综合性的工程仿真平台，广泛应用于结构、流体、电磁、热分析等领域。', ['有限元分析', 'CFD仿真', '电磁分析', '热分析', '多物理场耦合', '工程优化'], ['CAE', '有限元', 'CFD', '多物理场', '工业仿真'], ['Desktop'], '⭐ 4.8', 'https://www.ansys.com', 'https://ansyshelp.ansys.com'),
+                T('starccm', 'STAR-CCM+', 'Siemens', 'badge-pro', '专业CFD', 'fa-water', '高端流体仿真软件，擅长复杂流动、传热、多相流和旋转机械分析。', ['CFD仿真', '多相流', '传热分析', '旋转机械', '自动网格划分', '后处理一体化'], ['流体仿真', 'CFD', '多相流', '传热', '航空航天'], ['Desktop'], '⭐ 4.7', 'https://www.siemens.com/zh-cn/', 'https://documentation.sw.siemens.com'),
+                T('abaqus', 'ABAQUS', 'Dassault Systèmes', 'badge-pro', '高端结构', 'fa-industry', '顶级非线性有限元分析软件，适用于复杂材料、接触、断裂、冲击和大变形等结构力学问题。', ['非线性有限元', '接触分析', '复合材料', '断裂与损伤', '动力学分析', '用户子程序'], ['有限元', '结构分析', '非线性', '材料力学', '高端CAE'], ['Desktop'], '⭐ 4.8', 'https://www.3ds.com/products-services/simulia/products/abaqus/', 'https://help.3ds.com'),
+                T('comsol', 'COMSOL Multiphysics', 'COMSOL', 'badge-pro', '多物理场', 'fa-braille', '多物理场耦合仿真标杆软件，适用于电磁、流体、热传导、结构、生物医学等复杂耦合问题研究。', ['多物理场耦合', 'PDE建模', '电磁分析', '流固热耦合', '参数扫描', 'App定制'], ['多物理场', 'PDE', '电磁', '流固耦合', '科研仿真'], ['Desktop'], '⭐ 4.8', 'https://www.comsol.com', 'https://doc.comsol.com'),
+                T('simulink', 'Simulink', 'MathWorks', 'badge-enterprise', '系统建模', 'fa-diagram-project', 'MATLAB 生态下的动态图形化建模与仿真平台，适用于控制系统、信号处理、机电系统和数字孪生开发。', ['框图建模', '动态系统仿真', '控制系统设计', '代码生成', '状态机建模', 'MATLAB集成'], ['系统仿真', '控制系统', 'MATLAB', '机电系统', '数字孪生'], ['Desktop'], '⭐ 4.7', 'https://www.mathworks.com/products/simulink.html', 'https://www.mathworks.com/help/simulink/'),
+                T('adams', 'MSC Adams', 'Hexagon / MSC Software', 'badge-pro', '机构动力学', 'fa-gears', '多体动力学仿真经典软件，广泛用于机械系统、车辆、机器人和运动机构分析。', ['多体动力学', '机构运动分析', '载荷计算', '刚柔耦合', '控制联合仿真', '机械系统优化'], ['多体动力学', '机构仿真', '机械系统', '车辆工程'], ['Desktop'], '⭐ 4.6', 'https://hexagon.com/products/adams', 'https://simcompanion.hexagon.com'),
+                T('hyperworks', 'Altair HyperWorks', 'Altair', 'badge-enterprise', 'CAE平台', 'fa-layer-group', '集前处理、求解、优化和后处理于一体的 CAE 平台，在轻量化设计、结构优化和多学科仿真中表现突出。', ['前后处理', '拓扑优化', '结构分析', '多学科设计', '网格划分', '高性能计算'], ['CAE平台', '拓扑优化', '结构优化', '轻量化设计'], ['Desktop'], '⭐ 4.6', 'https://altair.com/hyperworks', 'https://help.altair.com'),
+                T('tecplot', 'Tecplot 360', 'Tecplot, Inc.', 'badge-pro', '后处理', 'fa-chart-surface', '专业科学可视化与仿真后处理软件，尤其适合 CFD、有限元和多变量场数据的高质量结果分析与展示。', ['CFD后处理', '三维可视化', '流线与等值面', '大规模数据处理', '动画输出', '脚本自动化'], ['后处理', '科学可视化', 'CFD结果', '三维场数据'], ['Desktop'], '⭐ 4.6', 'https://www.tecplot.com/products/tecplot-360/', 'https://kb.tecplot.com')
+            ],
+            science: [
+                T('illustrator', 'Adobe Illustrator', 'Adobe', 'badge-pro', '专业设计', 'fa-bezier-curve', '矢量图形设计行业标准工具，广泛用于论文插图、示意图、期刊封面图制作。', ['矢量绘图', '路径编辑', '高精度排版', 'SVG/PDF导出', '图层管理', '与PS联动'], ['论文插图', '矢量图', '期刊图', '排版', '科研绘图'], ['Desktop'], '⭐ 4.8', 'https://www.adobe.com/products/illustrator.html', 'https://helpx.adobe.com/illustrator/user-guide.html'),
+                T('photoshop', 'Adobe Photoshop', 'Adobe', 'badge-pro', '专业图像', 'fa-image', '最强大的图像处理软件之一，常用于科研图像后处理、拼图和图像增强。', ['图像处理', '图层编辑', '滤镜效果', '图像增强', '批处理', '多格式支持'], ['图像处理', '科研图片', '显微图', '后处理', '拼图'], ['Desktop'], '⭐ 4.7', 'https://www.adobe.com/products/photoshop.html', 'https://helpx.adobe.com/photoshop/user-guide.html'),
+                T('powerpoint', 'Microsoft PowerPoint', 'Microsoft', 'badge-basic', '常用工具', 'fa-file-powerpoint', '最常用的演示与图形工具之一，在科研中广泛用于论文配图、示意图绘制和学术汇报。', ['演示文稿', '形状绘图', '动画效果', '图表支持', '模板丰富', '易上手'], ['PPT', '科研汇报', '示意图', '教学', '快速绘图'], ['Desktop', 'Web'], '⭐ 4.6', 'https://www.microsoft.com/powerpoint', 'https://support.microsoft.com/powerpoint'),
+                T('napkin', 'Napkin.ai', 'Napkin AI', 'badge-trial', 'AI工具', 'fa-lightbulb', 'AI 驱动的可视化表达工具，可以将文本内容自动转化为结构化图示、流程图和逻辑图。', ['文本转图示', '自动结构化', '逻辑图生成', '流程图', 'AI辅助表达', '快速可视化'], ['AI绘图', '科研表达', '思维结构', '自动生成', '可视化'], ['Web'], '⭐ 4.6', 'https://www.napkin.ai', 'https://www.napkin.ai'),
+                T('geogebra', 'GeoGebra', 'GeoGebra Team', 'badge-free', '免费开源', 'fa-ruler-combined', '动态数学软件，结合几何、代数、微积分、统计等功能，适合数学教学和科研中的函数绘图与几何分析。', ['几何画板', '代数计算', '3D图形', '微积分', '统计图表', 'CAS系统'], ['数学', '几何', '函数绘图', '3D', '教学'], ['Web', 'Desktop', 'Mobile'], '⭐ 4.7', 'https://www.geogebra.org', 'https://www.geogebra.org/m/tutorials'),
+                T('inkscape', 'Inkscape', 'Inkscape Community', 'badge-open', '开源免费', 'fa-pen-fancy', '功能强大的开源矢量图形编辑器，适合绘制精确的科学插图、示意图和流程图。', ['矢量编辑', '路径操作', '精确绘图', 'SVG导出', '扩展脚本', '位图描摹'], ['矢量图形', '科学插图', '示意图', 'SVG', '开源'], ['Desktop'], '⭐ 4.5', 'https://inkscape.org', 'https://inkscape.org/doc'),
+                T('chemdraw', 'ChemDraw', 'PerkinElmer', 'badge-pro', '商业版', 'fa-flask', '化学领域的标准绘图工具，用于绘制分子结构式、化学反应式和实验装置图。', ['分子结构', '化学反应式', '实验装置', 'NMR预测', '命名转换', 'ACS格式导出'], ['化学结构', '分子式', '反应式', '实验装置', 'ACS标准'], ['Desktop'], '⭐ 4.8', 'https://www.perkinelmer.com/product/chemdraw-professional', 'https://www.perkinelmer.com/lab-products-and-services/resources/chemsketch.html')
+            ],
+            aiart: [
+                T('gemini', 'Google Gemini (Nano Banana 2)', 'Google', 'badge-trial', '多模态', 'fa-brain', 'Google 最新多模态模型，支持文本、图像、视频生成与理解，适用于科研可视化与 AI 创作。', ['多模态生成', '文生图', '图像理解', '视频生成', '跨模态推理', 'Google生态'], ['Google', '多模态', 'AI生成', '图像', '视频'], ['Web', 'API'], '⭐ 4.7', 'https://deepmind.google/technologies/gemini/', 'https://ai.google.dev'),
+                T('sora', 'Sora', 'OpenAI', 'badge-trial', '前沿模型', 'fa-film', 'OpenAI 推出的文本生成视频模型，可从文字生成高质量视频内容，也逐步支持图像与多模态创作。', ['文生视频', '多模态生成', '高真实感', '物理模拟', '长视频生成', 'AI叙事'], ['AI视频', '多模态', 'OpenAI', '生成式AI', '前沿模型'], ['Web'], '⭐ 4.8', 'https://openai.com/sora', 'https://openai.com/research'),
+                T('claude', 'Claude', 'Anthropic', 'badge-trial', '多模态', 'fa-comments', 'Anthropic 推出的大模型，支持文本与图像理解，适用于科研辅助、图像分析与 AI 生成任务。', ['多模态理解', '长文本处理', '图像分析', '安全对齐', '科研辅助', '推理能力'], ['Claude', '多模态', 'AI分析', '图像理解'], ['Web', 'API'], '⭐ 4.6', 'https://www.anthropic.com', 'https://docs.anthropic.com'),
+                T('qwen', '通义千问 (Qwen)', '阿里巴巴', 'badge-trial', '国产AI', 'fa-cloud', '阿里推出的大模型体系，支持图像生成、视频生成和多模态理解，适用于科研绘图与内容生成。', ['文生图', '视频生成', '多模态', '开源模型', 'API支持', '中文优化'], ['国产AI', '多模态', '图像生成', '视频'], ['Web', 'API'], '⭐ 4.6', 'https://qwen.aliyun.com', 'https://help.aliyun.com'),
+                T('doubao', '豆包 AI', '字节跳动', 'badge-trial', '国产AI', 'fa-bolt', '字节跳动推出的 AI 助手，支持文生图、AI 绘图与多模态生成，适合日常创意和科研辅助。', ['文生图', '图像生成', 'AI对话', '多模态', '中文优化', '创意生成'], ['字节跳动', 'AI绘图', '中文AI', '多模态'], ['Web', 'App'], '⭐ 4.5', 'https://www.doubao.com', 'https://www.doubao.com/help'),
+                T('deepseek', 'DeepSeek', 'DeepSeek', 'badge-open', '开源生态', 'fa-microchip', '国产开源大模型代表，支持多模态扩展与推理能力，逐步拓展至图像生成与科研应用场景。', ['开源模型', '推理能力强', '多模态扩展', '本地部署', '科研应用', 'API支持'], ['国产开源', '推理模型', '多模态', 'AI生态'], ['Web', 'API', '本地部署'], '⭐ 4.7', 'https://www.deepseek.com', 'https://platform.deepseek.com'),
+                T('midjourney', 'Midjourney', 'Midjourney', 'badge-pro', '订阅制', 'fa-wand-magic-sparkles', '通过文本提示词生成高质量图像的 AI 工具，特别擅长概念艺术和科研示意图的快速原型设计。', ['文生图', '风格控制', '图像放大', '变体生成', '社区画廊', '高分辨率'], ['AI生成', '概念图', '示意图', '艺术', '文生图'], ['Discord', 'Web'], '⭐ 4.6', 'https://www.midjourney.com', 'https://docs.midjourney.com'),
+                T('dalle', 'DALL-E', 'OpenAI', 'badge-trial', '免费额度', 'fa-robot', 'OpenAI 开发的多模态 AI 图像生成模型，可以根据自然语言描述创建、编辑和变体图像。', ['文生图', '图像编辑', '变体生成', '风格控制', '精确控制', 'API支持'], ['AI生成', 'OpenAI', 'API', '文生图', '图像编辑'], ['Web', 'API'], '⭐ 4.5', 'https://openai.com/dall-e-3', 'https://platform.openai.com/docs/guides/images'),
+                T('stable-diffusion', 'Stable Diffusion', 'Stability AI', 'badge-open', '开源免费', 'fa-image', '开源的文本到图像扩散模型，可本地部署，支持 LoRA 微调和 ControlNet 控制。', ['文生图', '图生图', 'LoRA微调', 'ControlNet', '本地部署', 'ControlNet骨骼'], ['开源AI', '本地部署', 'LoRA', '扩散模型', '可定制'], ['Web', 'Desktop', 'Colab'], '⭐ 4.7', 'https://stability.ai', 'https://github.com/AUTOMATIC1111/stable-diffusion-webui')
+            ]
+        };
+
+        const categoryMeta = {
+            home: { name: '首页概览', icon: 'fa-home' },
+            flowchart: { name: '流程框图工具', icon: 'fa-project-diagram', colorClass: 'c1', colorNum: 'ic1', accent: 'var(--c1)', accentGrad: 'var(--c1g)', desc: '绘制专业的流程图、架构图、UML 图和组织结构图', count: 8 },
+            mindmap: { name: '思维导图工具', icon: 'fa-sitemap', colorClass: 'c2', colorNum: 'ic2', accent: 'var(--c2)', accentGrad: 'var(--c2g)', desc: '构建知识图谱、梳理研究思路、规划项目结构', count: 8 },
+            chart: { name: '数据图表工具', icon: 'fa-chart-line', colorClass: 'c3', colorNum: 'ic3', accent: 'var(--c3)', accentGrad: 'var(--c3g)', desc: '创建论文级数据可视化，支持多种图表类型与导出格式', count: 8 },
+            '3dmodel': { name: '3D模型工具', icon: 'fa-cube', colorClass: 'c4', colorNum: 'ic4', accent: 'var(--c4)', accentGrad: 'var(--c4g)', desc: '分子结构、设备模型、3D 示意图的创建与渲染', count: 8 },
+            code: { name: '代码绘图工具', icon: 'fa-code', colorClass: 'c5', colorNum: 'ic5', accent: 'var(--c5)', accentGrad: 'var(--c5g)', desc: '通过代码描述生成图表，支持 PlantUML、Mermaid 等 DSL', count: 8 },
+            sim: { name: '仿真电路工具', icon: 'fa-microchip', colorClass: 'c6', colorNum: 'ic6', accent: 'var(--c6)', accentGrad: 'var(--c6g)', desc: '电子电路设计、仿真与 PCB 布局的专业工具', count: 8 },
+            science: { name: '科学图形工具', icon: 'fa-flask', colorClass: 'c7', colorNum: 'ic7', accent: 'var(--c7)', accentGrad: 'var(--c7g)', desc: '绘制化学结构式、物理示意图、生物细胞图等专业图形', count: 7 },
+            aiart: { name: 'AI绘图工具', icon: 'fa-wand-magic-sparkles', colorClass: 'c8', colorNum: 'ic8', accent: 'var(--c8)', accentGrad: 'var(--c8g)', desc: '利用人工智能技术生成科研插图、示意图与概念图', count: 9 }
+        };
+
+        /* =========================================================
+           代码示例配置区：修改详情页“代码示例”Tab 的内容。
+           每个分类都有 codeLang 和 code 字段。
+           ========================================================= */
+        const detailTemplates = {
+            flowchart: {
+                exampleTitle: '科研流程 / 系统架构示例',
+                exampleCaption: '示例模拟“实验设计—数据采集—预处理—建模—验证—论文输出”的流程结构，可替换为实验流程、系统架构、UML 或组织结构图。',
+                steps: [
+                    ['选择模板或空白画布', '根据论文配图、实验流程或系统架构目标选择流程图、UML、ER 图或泳道图模板。'],
+                    ['搭建节点层级', '用矩形、判断、数据库、服务节点等元素表达核心对象，并控制同一层级的对齐关系。'],
+                    ['连接逻辑关系', '使用箭头、连接线、泳道或分组标明数据流、控制流、责任边界和流程顺序。'],
+                    ['统一样式并导出', '统一字号、线宽、颜色和间距，导出 SVG/PDF 用于论文，导出 PNG 用于汇报。']
+                ],
+                codeLang: 'Mermaid',
+                code: `flowchart LR
+    A[实验设计] --> B[数据采集]
+    B --> C[数据清洗]
+    C --> D{模型是否达标?}
+    D -- 否 --> C
+    D -- 是 --> E[可视化分析]
+    E --> F[论文图表输出]`
+            },
+            mindmap: {
+                exampleTitle: '论文选题知识树示例',
+                exampleCaption: '示例展示科研主题从背景、问题、方法、实验、结果和写作计划展开的结构，可用于开题报告、文献综述和项目拆解。',
+                steps: [
+                    ['确定中心主题', '把论文题目、研究问题或项目目标作为中心节点，避免主题过宽。'],
+                    ['拆分一级分支', '围绕背景、理论、方法、实验、数据、结果和写作计划建立主分支。'],
+                    ['补充证据与任务', '在每个分支下添加文献、实验方案、待办任务和关键指标。'],
+                    ['导出大纲或图片', '将导图导出为 PNG/PDF 用于展示，或导出 Markdown/Word 继续写作。']
+                ],
+                codeLang: 'Markdown',
+                code: `# 研究主题
+- 背景与意义
+  - 研究现状
+  - 问题缺口
+- 方法设计
+  - 数据来源
+  - 模型方案
+- 实验验证
+  - 指标体系
+  - 对照实验
+- 论文输出
+  - 图表清单
+  - 写作计划`
+            },
+            chart: {
+                exampleTitle: '多组实验结果对比图示例',
+                exampleCaption: '示例模拟不同方法在多个指标上的对比，可扩展为折线图、箱线图、热力图、误差棒图或交互式仪表板。',
+                steps: [
+                    ['整理数据表', '保证变量命名清晰、单位一致，区分自变量、因变量、分组变量和误差项。'],
+                    ['选择图表类型', '趋势用折线，分布用箱线/小提琴，相关性用散点/热力图，对比用柱状或点图。'],
+                    ['优化视觉编码', '控制坐标轴、图例、误差线、标注、配色和图中文字大小。'],
+                    ['导出论文格式', '优先导出 SVG/PDF/EPS，位图建议 300–600 dpi，并保留源数据和脚本。']
+                ],
+                codeLang: 'Python',
+                code: `import matplotlib.pyplot as plt
+
+methods = ['A', 'B', 'C', 'D']
+accuracy = [0.82, 0.87, 0.91, 0.89]
+
+plt.figure(figsize=(5, 3.2))
+plt.plot(methods, accuracy, marker='o')
+plt.xlabel('Method')
+plt.ylabel('Accuracy')
+plt.title('Experiment comparison')
+plt.tight_layout()
+plt.savefig('figure.svg')
+plt.show()`
+            },
+            '3dmodel': {
+                exampleTitle: '实验装置 / 结构组件三维示例',
+                exampleCaption: '示例模拟由核心结构、支撑部件和尺寸标注组成的 3D 科研示意图，可用于机械结构、实验装置、分子模型或渲染动画。',
+                steps: [
+                    ['建立基础几何', '从草图、几何体或导入模型开始，先确定比例、坐标和主要结构。'],
+                    ['细化结构关系', '添加装配、约束、倒角、孔洞、曲面或材质，使模型符合工程或展示需求。'],
+                    ['设置视角与材质', '选择正交/透视视角，设置材质、光照、阴影和背景，突出关键部件。'],
+                    ['渲染或导出', '导出 PNG/SVG 截图、STEP/STL/OBJ 模型或动画，用于论文、专利和汇报。']
+                ],
+                codeLang: 'Blender Python',
+                code: `import bpy
+
+bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0, 0))
+base = bpy.context.object
+base.name = 'Base Module'
+
+bpy.ops.mesh.primitive_uv_sphere_add(location=(0, 0, 1.5))
+sphere = bpy.context.object
+sphere.name = 'Core Structure'
+
+bpy.ops.wm.save_as_mainfile(filepath='research_model.blend')`
+            },
+            code: {
+                exampleTitle: '代码驱动图表 / DSL 图示示例',
+                exampleCaption: '示例展示用代码描述节点、数据或样式，让图形可以版本控制、批量生成，并与论文或报告自动化流程结合。',
+                steps: [
+                    ['准备数据或图形描述', '将数据整理为 CSV/JSON/DataFrame，或将流程关系写成 Mermaid、PlantUML 等文本 DSL。'],
+                    ['编写最小绘图脚本', '先生成可读图形，再逐步添加字体、尺寸、配色、图例和导出参数。'],
+                    ['封装可复用模板', '把通用样式、路径、主题和导出逻辑封装，方便批量生成论文图。'],
+                    ['纳入版本控制', '将脚本、数据和输出图统一管理，确保结果可追溯、可复现。']
+                ],
+                codeLang: 'Python',
+                code: `import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.DataFrame({
+    'x': [1, 2, 3, 4, 5],
+    'y': [2.1, 2.7, 3.6, 4.1, 5.0]
+})
+
+ax = df.plot(x='x', y='y', marker='o', legend=False)
+ax.set_xlabel('Time')
+ax.set_ylabel('Response')
+plt.tight_layout()
+plt.savefig('reproducible_figure.pdf')`
+            },
+            sim: {
+                exampleTitle: '仿真建模流程与结果云图示例',
+                exampleCaption: '示例模拟“几何建模—网格划分—边界条件—求解—后处理”的仿真链路，可对应结构、流体、电磁、热或多物理场问题。',
+                steps: [
+                    ['定义物理问题', '明确研究对象、控制方程、材料参数、载荷、边界条件和评价指标。'],
+                    ['建立模型与网格', '导入或创建几何模型，进行合理简化并划分网格，必要时做网格无关性检查。'],
+                    ['设置求解参数', '选择稳态/瞬态、线性/非线性、耦合方式和收敛准则，运行计算。'],
+                    ['后处理与验证', '输出云图、曲线、动画和关键数值，并与实验或理论结果对比。']
+                ],
+                codeLang: 'Python',
+                code: `import pandas as pd
+import matplotlib.pyplot as plt
+
+result = pd.read_csv('simulation_result.csv')
+plt.plot(result['time'], result['response'])
+plt.xlabel('Time (s)')
+plt.ylabel('Response')
+plt.title('Simulation response')
+plt.tight_layout()
+plt.savefig('simulation_response.png')`
+            },
+            science: {
+                exampleTitle: '论文机制图 / 实验示意图示例',
+                exampleCaption: '示例模拟论文中常见的机制示意图，包含对象、过程、方向箭头和注释，可用于化学、生物、物理和工程类图形。',
+                steps: [
+                    ['明确图形叙事', '先写出图想表达的核心结论，确定读者一眼需要看懂的关系。'],
+                    ['绘制基础元素', '用矢量形状、图标、结构式、显微图或数学图形搭建主体。'],
+                    ['添加标注和层级', '用箭头、编号、颜色、透明度和分组来组织视觉层级。'],
+                    ['检查期刊规范', '核对字号、线宽、分辨率、色彩模式、版权素材和导出格式。']
+                ],
+                codeLang: 'SVG',
+                code: `<svg width="520" height="220" viewBox="0 0 520 220" xmlns="http://www.w3.org/2000/svg">
+  <rect x="30" y="60" width="120" height="80" rx="16" fill="#10b981" opacity="0.2"/>
+  <text x="90" y="105" text-anchor="middle">Sample</text>
+  <path d="M170 100 L250 100" stroke="#10b981" stroke-width="3"/>
+  <circle cx="320" cy="100" r="42" fill="#4facfe" opacity="0.22"/>
+  <text x="320" y="105" text-anchor="middle">Analysis</text>
+</svg>`
+            },
+            aiart: {
+                exampleTitle: '文本生成科研概念图示例',
+                exampleCaption: '示例模拟将研究主题、视觉风格和图形约束写成提示词后生成概念图，再进入人工精修和期刊格式化流程。',
+                steps: [
+                    ['写清科研目标', '在提示词中说明研究对象、机制、场景、风格、比例、是否需要文字和期刊用途。'],
+                    ['生成多版草图', '先生成多种构图方向，筛选信息清晰、结构准确、视觉干净的版本。'],
+                    ['人工校正科学性', '检查模型结构、实验关系、文字、标注和物理/化学/生物合理性。'],
+                    ['二次编辑与规范化', '用矢量软件或图像软件统一字体、标注、分辨率和期刊格式。']
+                ],
+                codeLang: 'Prompt',
+                code: `请生成一张科研论文风格机制示意图：
+主题：纳米材料在细胞微环境中的响应释放机制
+构图：左侧为材料结构，中间为细胞环境，右侧为响应释放结果
+风格：深色背景、简洁矢量、少量发光、无多余文字
+要求：标注关键箭头，留出后期添加中文标签的位置，16:9`
+            }
+        };
+
+        function getIcon(iconName) {
+            return `<i class="fas ${iconName}"></i>`;
+        }
+
+        function escapeHTML(str = '') {
+            return String(str).replace(/[&<>'"]/g, s => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[s]));
+        }
+
+        function getPlatformIcon(platform) {
+            const icons = {
+                Web: 'fa-globe', Desktop: 'fa-desktop', Mobile: 'fa-mobile-alt', Chrome: 'fa-chrome',
+                Python: 'fa-python', R: 'fa-chart-bar', Julia: 'fa-function', Java: 'fa-coffee',
+                Discord: 'fa-discord', API: 'fa-plug', Colab: 'fa-google', Cpp: 'fa-code',
+                'C++': 'fa-code', 'VSCode插件': 'fa-code', 'Markdown编辑器': 'fa-file-alt',
+                Mac: 'fa-apple', iOS: 'fa-mobile-screen', App: 'fa-mobile-alt', '本地部署': 'fa-server', Server: 'fa-server'
+            };
+            return icons[platform] || 'fa-desktop';
+        }
+
+        function buildNavigation() {
+            const nav = document.getElementById('sidebarNav');
+            nav.innerHTML = `
+                <div class="nav-label">导航</div>
+                <div class="nav-item active" data-cat="home"><div class="nav-icon">${getIcon('fa-home')}</div><span class="nav-text">首页概览</span></div>
+                <div class="nav-label">绘图工具</div>
+                ${['flowchart', 'mindmap', 'chart', '3dmodel'].map(buildNavItem).join('')}
+                <div class="nav-label">代码与仿真</div>
+                ${['code', 'sim'].map(buildNavItem).join('')}
+                <div class="nav-label">专业工具</div>
+                ${['science', 'aiart'].map(buildNavItem).join('')}
+            `;
+        }
+
+        function buildNavItem(catKey) {
+            const meta = categoryMeta[catKey];
+            const count = toolsData[catKey]?.length || meta.count;
+            return `<div class="nav-item" data-cat="${catKey}"><div class="nav-icon">${getIcon(meta.icon)}</div><span class="nav-text">${meta.name.replace('工具','')}</span><span class="nav-count">${count}</span></div>`;
+        }
+
+        function buildCatCard(catKey) {
+            const meta = categoryMeta[catKey];
+            return `
+                <div class="cat-card" data-c="${catKey}" style="--accent:${meta.accent};--accent-grad:${meta.accentGrad};">
+                    <div class="cat-card-header">
+                        <div class="cat-card-icon">${getIcon(meta.icon)}</div>
+                        <div><div class="cat-card-name">${meta.name.replace('工具', '')}</div><div class="cat-card-num">${toolsData[catKey].length} 款工具</div></div>
+                    </div>
+                    <p class="cat-card-desc">${meta.desc}</p>
+                    <div class="cat-card-tags"><span class="cat-tag">${getIcon('fa-arrow-right')} 查看详情</span></div>
+                </div>`;
+        }
+
+        function buildToolCard(tool, catKey) {
+            const meta = categoryMeta[catKey];
+            const platformTags = tool.platforms.map(p => `<span class="plat-tag">${getIcon(getPlatformIcon(p))} ${p}</span>`).join('');
+            const tagElements = tool.tags.map(tag => `<span class="t-tag">${tag}</span>`).join('');
+            return `
+                <div class="tool-card" data-id="${tool.id}" data-cat="${catKey}" style="--accent:${meta.accent};--accent-grad:${meta.accentGrad};">
+                    <div class="card-hdr">
+                        <div class="card-icon">${getIcon(tool.icon)}</div>
+                        <div class="card-info"><div class="card-name">${tool.name}</div><div class="card-vendor">${tool.vendor}</div></div>
+                        <span class="card-badge ${tool.badge}">${tool.badgeText}</span>
+                    </div>
+                    <p class="card-desc">${tool.desc}</p>
+                    <div class="platform-tags">${platformTags}</div>
+                    <div class="card-tags">${tagElements}</div>
+                    <div class="card-ftr">
+                        <div class="card-links">
+                            <a href="${tool.link}" target="_blank" class="c-link">${getIcon('fa-external-link-alt')} 官网</a>
+                            <a href="${tool.doc}" target="_blank" class="c-link">${getIcon('fa-book')} 文档</a>
+                        </div>
+                        <div class="card-stars">${getIcon('fa-star')} ${tool.stars}</div>
+                    </div>
+                    <button class="view-detail-btn" data-id="${tool.id}" data-cat="${catKey}">${getIcon('fa-circle-info')} 查看详情</button>
+                </div>`;
+        }
+
+        function renderPages() {
+            const content = document.getElementById('contentArea');
+            const cats = Object.keys(toolsData);
+            content.innerHTML = `
+                <div class="page active" id="page-home">
+                    <div class="hero">
+                        <div class="hero-badge">${getIcon('fa-circle')} 收录 <span id="heroTotal">63+</span> 精选科研绘图工具</div>
+                        <h1>科研绘图工具<br><span class="grad">全景展示平台</span></h1>
+                        <p>从流程图到 3D 模型，从代码到 AI 生成，一站式发现最适合科研工作者的可视化工具</p>
+                        <div class="hero-stats">
+                            <div class="h-stat"><div class="num" id="heroTotalNum">63+</div><div class="lab">精选工具</div></div>
+                            <div class="h-stat"><div class="num">8</div><div class="lab">功能分类</div></div>
+                            <div class="h-stat"><div class="num">Free</div><div class="lab">免费工具占多数</div></div>
+                            <div class="h-stat"><div class="num">Open</div><div class="lab">开源可自托管</div></div>
+                        </div>
+                    </div>
+                    <div class="cat-grid" id="catGrid">${cats.map(buildCatCard).join('')}</div>
+                </div>
+                ${cats.map(catKey => buildCategoryPage(catKey)).join('')}
+            `;
+        }
+
+        function buildCategoryPage(catKey) {
+            const meta = categoryMeta[catKey];
+            return `
+                <div class="page page-${catKey}" id="page-${catKey}" style="--accent:${meta.accent};--accent-grad:${meta.accentGrad};">
+                    <div class="page-header">
+                        <div class="page-header-bar">
+                            <div class="page-icon-lg">${getIcon(meta.icon)}</div>
+                            <div><h2 class="page-title">${meta.name}</h2><p class="page-desc">${meta.desc}</p></div>
+                            <div class="page-line"></div>
+                        </div>
+                    </div>
+                    <div class="tools-grid" id="grid-${catKey}">${toolsData[catKey].map(tool => buildToolCard(tool, catKey)).join('')}</div>
+                </div>`;
+        }
+
+        function bindCards() {
+            document.querySelectorAll('.cat-card').forEach(card => {
+                card.addEventListener('click', () => navigateTo(card.dataset.c));
+            });
+            document.querySelectorAll('.tool-card').forEach(card => {
+                card.addEventListener('click', () => openModal(card.dataset.id, card.dataset.cat));
+            });
+            document.querySelectorAll('.view-detail-btn').forEach(btn => {
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    openModal(btn.dataset.id, btn.dataset.cat);
+                });
+            });
+            document.querySelectorAll('.c-link').forEach(link => {
+                link.addEventListener('click', e => e.stopPropagation());
+            });
+        }
+
+        let currentPage = 'home';
+
+        function navigateTo(pageName) {
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.cat === pageName));
+            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+            document.getElementById(`page-${pageName}`)?.classList.add('active');
+            const meta = categoryMeta[pageName];
+            document.getElementById('pageHeading').textContent = meta?.name || '科研绘图工具全景展示平台';
+            document.getElementById('breadcrumbCat').textContent = meta?.name || '首页';
+            const searchInput = document.getElementById('searchInput');
+            searchInput.placeholder = pageName === 'home' ? '搜索所有工具...' : `在 ${meta?.name || ''} 中搜索...`;
+            currentPage = pageName;
+            document.getElementById('sidebar')?.classList.remove('mobile-open');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (pageName !== 'home') history.pushState({ page: pageName }, '', `#${pageName}`);
+            else history.pushState({ page: 'home' }, '', window.location.pathname);
+        }
+
+        function initNavigation() {
+            document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => navigateTo(item.dataset.cat)));
+        }
+
+        function getToolById(toolId, catKey) {
+            return toolsData[catKey]?.find(t => t.id === toolId);
+        }
+
+        function getScoreSeed(tool, catKey) {
+            const isEnterprise = /企业|工业|商业|Pro|专业|行业|标准/.test(tool.badgeText + tool.desc);
+            const isCodeLike = ['chart', 'code'].includes(catKey) || tool.platforms.includes('Python') || tool.platforms.includes('API');
+            return {
+                ease: Math.max(68, Math.min(96, isEnterprise ? 74 : 86)),
+                depth: Math.max(72, Math.min(98, isEnterprise ? 94 : 84)),
+                output: Math.max(76, Math.min(96, isCodeLike ? 92 : 86)),
+                collaboration: Math.max(62, Math.min(94, tool.features.some(f => /协作|云|团队|共享|多人/.test(f)) ? 90 : 72)),
+                speed: Math.max(70, Math.min(95, /免费|开源/.test(tool.badgeText) ? 86 : 80))
+            };
+        }
+
+        function buildDefaultDetail(tool, catKey) {
+            const tpl = detailTemplates[catKey] || detailTemplates.chart;
+            const scores = getScoreSeed(tool, catKey);
+            const isPaid = /pro|enterprise|商业|付费|订阅|工业|专业|企业|标准/i.test(tool.badge + tool.badgeText);
+            return {
+                intro: `${tool.name} 是 ${tool.vendor} 提供的${categoryMeta[catKey]?.name || '科研绘图'}相关工具。${tool.desc} 它适合在科研项目中完成从素材整理、结构搭建、视觉优化到导出发表的完整流程，尤其适用于 ${tool.tags.slice(0, 4).join('、')} 等场景。`,
+                scores,
+                pros: [tool.features[0] || '功能完整', tool.features[1] || '输出质量稳定', tool.platforms.length > 1 ? '跨平台使用灵活' : '工作流聚焦清晰'],
+                cons: [isPaid ? '高级能力通常需要授权或订阅' : '复杂项目仍需要一定学习成本', catKey === 'aiart' ? '生成结果需要人工校验科学准确性' : '高质量论文图仍需后期排版与统一样式'],
+                ...tpl,
+                compare: {
+                    license: tool.badgeText,
+                    learning: isPaid ? '中等偏高' : '较易上手',
+                    bestFor: tool.tags.slice(0, 2).join(' / '),
+                    output: catKey === 'aiart' ? '草图 / 概念图' : 'PNG / SVG / PDF'
+                }
+            };
+        }
+
+        /* =========================================================
+           示例图片配置区：修改详情页“示例图”Tab 的 SVG。
+           你可以直接改 buildExampleSVG 内对应分类的 SVG 结构。
+           也可以返回 <img src="你的图片地址"> 或粘贴 base64 图片。
+           ========================================================= */
+        function buildExampleSVG(tool, catKey, accentHex = '#4facfe') {
+            const title = escapeHTML(tool.name);
+            let imgSrc = `images/${tool.id}.png`;
+
+            // 为不同分类生成默认示例SVG
+            function getDefaultExample() {
+                const examples = {
+                    flowchart: `<svg viewBox="0 0 520 280" xmlns="http://www.w3.org/2000/svg">
+                        <defs><style>.flow-text{font-size:14px;fill:var(--text-primary);font-weight:600;}</style></defs>
+                        <rect x="40" y="30" width="120" height="60" rx="8" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="100" y="65" text-anchor="middle" class="flow-text">开始</text>
+                        <path d="M160 60 L200 60" stroke="${accentHex}" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        <polygon points="200,50 220,60 200,70" fill="${accentHex}"/>
+                        <path d="M220 60 L260 60" stroke="${accentHex}" stroke-width="2"/>
+                        <polygon points="260,50 280,60 260,70" fill="${accentHex}"/>
+                        <rect x="280" y="30" width="120" height="60" rx="8" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="340" y="65" text-anchor="middle" class="flow-text">处理</text>
+                        <path d="M400 60 L440 60" stroke="${accentHex}" stroke-width="2"/>
+                        <polygon points="440,50 460,60 440,70" fill="${accentHex}"/>
+                        <path d="M460 60 L500 60" stroke="${accentHex}" stroke-width="2"/>
+                        <polygon points="500,50 520,60 500,70" fill="${accentHex}"/>
+                        <circle cx="100" cy="180" r="40" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="100" y="185" text-anchor="middle" class="flow-text">判断</text>
+                        <path d="M100 220 L100 240" stroke="${accentHex}" stroke-width="2"/>
+                        <polygon points="95,240 100,260 105,240" fill="${accentHex}"/>
+                        <rect x="280" y="150" width="120" height="60" rx="8" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="340" y="185" text-anchor="middle" class="flow-text">结束</text>
+                        <defs><marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" fill="${accentHex}"/></marker></defs>
+                    </svg>`,
+                    mindmap: `<svg viewBox="0 0 520 280" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="260" cy="140" r="35" fill="${accentHex}" opacity="0.3" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="260" y="145" text-anchor="middle" style="font-size:12px;fill:var(--text-primary);font-weight:600;">中心主题</text>
+                        <line x1="295" y1="140" x2="380" y2="80" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="420" cy="60" r="25" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="420" y="65" text-anchor="middle" style="font-size:11px;fill:var(--text-primary);">分支1</text>
+                        <line x1="295" y1="140" x2="380" y2="140" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="420" cy="140" r="25" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="420" y="145" text-anchor="middle" style="font-size:11px;fill:var(--text-primary);">分支2</text>
+                        <line x1="295" y1="140" x2="380" y2="200" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="420" cy="220" r="25" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="420" y="225" text-anchor="middle" style="font-size:11px;fill:var(--text-primary);">分支3</text>
+                        <line x1="225" y1="140" x2="140" y2="80" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="100" cy="60" r="25" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="100" y="65" text-anchor="middle" style="font-size:11px;fill:var(--text-primary);">分支4</text>
+                        <line x1="225" y1="140" x2="140" y2="200" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="100" cy="220" r="25" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="100" y="225" text-anchor="middle" style="font-size:11px;fill:var(--text-primary);">分支5</text>
+                    </svg>`,
+                    chart: `<svg viewBox="0 0 520 280" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="50" y1="240" x2="500" y2="240" stroke="var(--border)" stroke-width="2"/>
+                        <line x1="50" y1="240" x2="50" y2="40" stroke="var(--border)" stroke-width="2"/>
+                        <rect x="80" y="180" width="35" height="60" fill="${accentHex}" opacity="0.3" stroke="${accentHex}" stroke-width="1.5"/>
+                        <rect x="130" y="140" width="35" height="100" fill="${accentHex}" opacity="0.5" stroke="${accentHex}" stroke-width="1.5"/>
+                        <rect x="180" y="100" width="35" height="140" fill="${accentHex}" opacity="0.7" stroke="${accentHex}" stroke-width="1.5"/>
+                        <rect x="230" y="120" width="35" height="120" fill="${accentHex}" opacity="0.6" stroke="${accentHex}" stroke-width="1.5"/>
+                        <rect x="280" y="160" width="35" height="80" fill="${accentHex}" opacity="0.4" stroke="${accentHex}" stroke-width="1.5"/>
+                        <circle cx="350" cy="200" r="6" fill="${accentHex}"/>
+                        <circle cx="380" cy="160" r="6" fill="${accentHex}"/>
+                        <circle cx="410" cy="120" r="6" fill="${accentHex}"/>
+                        <circle cx="440" cy="140" r="6" fill="${accentHex}"/>
+                        <polyline points="350,200 380,160 410,120 440,140" fill="none" stroke="${accentHex}" stroke-width="2" opacity="0.6"/>
+                        <text x="30" y="250" style="font-size:12px;fill:var(--text-muted);">0</text>
+                        <text x="30" y="50" style="font-size:12px;fill:var(--text-muted);">100</text>
+                    </svg>`,
+                    '3dmodel': `<svg viewBox="0 0 520 280" xmlns="http://www.w3.org/2000/svg">
+                        <defs><linearGradient id="grad3d" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:${accentHex};stop-opacity:0.4"/><stop offset="100%" style="stop-color:${accentHex};stop-opacity:0.1"/></linearGradient></defs>
+                        <polygon points="150,80 250,40 280,140 180,180" fill="url(#grad3d)" stroke="${accentHex}" stroke-width="2"/>
+                        <polygon points="150,80 180,180 180,220 150,160" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <polygon points="250,40 280,140 280,180 250,80" fill="${accentHex}" opacity="0.3" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="350" cy="140" r="50" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="350" cy="140" r="35" fill="none" stroke="${accentHex}" stroke-width="1" opacity="0.5"/>
+                        <line x1="350" y1="90" x2="350" y2="190" stroke="${accentHex}" stroke-width="1" opacity="0.5"/>
+                        <line x1="300" y1="140" x2="400" y2="140" stroke="${accentHex}" stroke-width="1" opacity="0.5"/>
+                    </svg>`,
+                    code: `<svg viewBox="0 0 520 280" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="40" y="40" width="440" height="200" rx="8" fill="var(--bg-card)" stroke="var(--border)" stroke-width="1"/>
+                        <rect x="40" y="40" width="440" height="30" rx="8" fill="${accentHex}" opacity="0.1"/>
+                        <circle cx="55" cy="55" r="3" fill="${accentHex}" opacity="0.6"/>
+                        <circle cx="70" cy="55" r="3" fill="${accentHex}" opacity="0.6"/>
+                        <circle cx="85" cy="55" r="3" fill="${accentHex}" opacity="0.6"/>
+                        <text x="60" y="90" style="font-size:13px;fill:var(--text-secondary);font-family:monospace;">function drawChart() {</text>
+                        <text x="80" y="115" style="font-size:13px;fill:var(--text-secondary);font-family:monospace;">  const data = [1, 2, 3];</text>
+                        <text x="80" y="140" style="font-size:13px;fill:var(--text-secondary);font-family:monospace;">  plot(data);</text>
+                        <text x="80" y="165" style="font-size:13px;fill:var(--text-secondary);font-family:monospace;">  return result;</text>
+                        <text x="60" y="190" style="font-size:13px;fill:var(--text-secondary);font-family:monospace;">}</text>
+                        <rect x="460" y="85" width="8" height="120" rx="4" fill="${accentHex}" opacity="0.3"/>
+                        <rect x="460" y="95" width="8" height="40" rx="4" fill="${accentHex}" opacity="0.6"/>
+                    </svg>`,
+                    sim: `<svg viewBox="0 0 520 280" xmlns="http://www.w3.org/2000/svg">
+                        <defs><linearGradient id="gradSim" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" style="stop-color:${accentHex};stop-opacity:0.6"/><stop offset="100%" style="stop-color:${accentHex};stop-opacity:0.1"/></linearGradient></defs>
+                        <rect x="60" y="100" width="80" height="120" fill="url(#gradSim)" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="100" cy="80" r="15" fill="${accentHex}" opacity="0.3" stroke="${accentHex}" stroke-width="1.5"/>
+                        <path d="M100 160 Q80 200 60 220" stroke="${accentHex}" stroke-width="2" fill="none"/>
+                        <path d="M100 160 Q120 200 140 220" stroke="${accentHex}" stroke-width="2" fill="none"/>
+                        <circle cx="200" cy="140" r="50" fill="none" stroke="${accentHex}" stroke-width="2" opacity="0.4"/>
+                        <circle cx="200" cy="140" r="35" fill="none" stroke="${accentHex}" stroke-width="1.5" opacity="0.6"/>
+                        <circle cx="200" cy="140" r="20" fill="${accentHex}" opacity="0.2"/>
+                        <path d="M250 80 L350 80 L350 200 L250 200 Z" fill="${accentHex}" opacity="0.1" stroke="${accentHex}" stroke-width="2"/>
+                        <line x1="270" y1="100" x2="330" y2="100" stroke="${accentHex}" stroke-width="1" opacity="0.5"/>
+                        <line x1="270" y1="140" x2="330" y2="140" stroke="${accentHex}" stroke-width="1" opacity="0.5"/>
+                        <line x1="270" y1="180" x2="330" y2="180" stroke="${accentHex}" stroke-width="1" opacity="0.5"/>
+                    </svg>`,
+                    science: `<svg viewBox="0 0 520 280" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="100" cy="100" r="30" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="100" cy="100" r="20" fill="none" stroke="${accentHex}" stroke-width="1.5" opacity="0.6"/>
+                        <circle cx="100" cy="100" r="10" fill="${accentHex}" opacity="0.4"/>
+                        <path d="M130 100 L200 100" stroke="${accentHex}" stroke-width="2.5" marker-end="url(#arrowhead2)"/>
+                        <polygon points="200,95 220,100 200,105" fill="${accentHex}"/>
+                        <rect x="220" y="75" width="60" height="50" rx="4" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <text x="250" y="105" text-anchor="middle" style="font-size:12px;fill:var(--text-primary);font-weight:600;">反应</text>
+                        <path d="M280 100 L350 100" stroke="${accentHex}" stroke-width="2.5" marker-end="url(#arrowhead2)"/>
+                        <polygon points="350,95 370,100 350,105" fill="${accentHex}"/>
+                        <circle cx="400" cy="100" r="30" fill="${accentHex}" opacity="0.2" stroke="${accentHex}" stroke-width="2"/>
+                        <circle cx="400" cy="100" r="20" fill="none" stroke="${accentHex}" stroke-width="1.5" opacity="0.6"/>
+                        <circle cx="400" cy="100" r="10" fill="${accentHex}" opacity="0.4"/>
+                        <defs><marker id="arrowhead2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" fill="${accentHex}"/></marker></defs>
+                    </svg>`,
+                    aiart: `<svg viewBox="0 0 520 280" xmlns="http://www.w3.org/2000/svg">
+                        <defs><radialGradient id="gradAI" cx="50%" cy="50%" r="50%"><stop offset="0%" style="stop-color:${accentHex};stop-opacity:0.4"/><stop offset="100%" style="stop-color:${accentHex};stop-opacity:0.05"/></radialGradient></defs>
+                        <circle cx="260" cy="140" r="80" fill="url(#gradAI)" stroke="${accentHex}" stroke-width="2" opacity="0.6"/>
+                        <circle cx="260" cy="140" r="60" fill="none" stroke="${accentHex}" stroke-width="1.5" opacity="0.4"/>
+                        <circle cx="260" cy="140" r="40" fill="none" stroke="${accentHex}" stroke-width="1" opacity="0.3"/>
+                        <circle cx="260" cy="140" r="20" fill="${accentHex}" opacity="0.3"/>
+                        <circle cx="180" cy="80" r="12" fill="${accentHex}" opacity="0.5"/>
+                        <circle cx="340" cy="80" r="12" fill="${accentHex}" opacity="0.5"/>
+                        <circle cx="140" cy="140" r="12" fill="${accentHex}" opacity="0.5"/>
+                        <circle cx="380" cy="140" r="12" fill="${accentHex}" opacity="0.5"/>
+                        <circle cx="180" cy="200" r="12" fill="${accentHex}" opacity="0.5"/>
+                        <circle cx="340" cy="200" r="12" fill="${accentHex}" opacity="0.5"/>
+                        <line x1="200" y1="100" x2="260" y2="140" stroke="${accentHex}" stroke-width="1" opacity="0.3"/>
+                        <line x1="320" y1="100" x2="260" y2="140" stroke="${accentHex}" stroke-width="1" opacity="0.3"/>
+                        <line x1="160" y1="140" x2="260" y2="140" stroke="${accentHex}" stroke-width="1" opacity="0.3"/>
+                        <line x1="360" y1="140" x2="260" y2="140" stroke="${accentHex}" stroke-width="1" opacity="0.3"/>
+                    </svg>`
+                };
+                return examples[catKey] || examples.chart;
+            }
+
+            return `<div style="text-align: center; padding: 1rem;">
+                <div class="example-image-wrapper" style="display: inline-block; position: relative;">
+                    <img src="${imgSrc}" alt="${title} 示例图" 
+                         style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); display: block;"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div style="display: none; max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                        ${getDefaultExample()}
+                    </div>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem;">
+                    ${title} · 示例图片
+                </p>
+            </div>`;
+        }
+
+        function cssVarToHex(cssVar) {
+            const match = cssVar.match(/--c\d/);
+            return match ? getComputedStyle(document.documentElement).getPropertyValue(match[0]).trim() : '#4facfe';
+        }
+
+        function renderOverviewPanel(tool, catKey, detail) {
+            const scoreRows = [
+                ['易用性', detail.scores.ease], ['功能深度', detail.scores.depth], ['输出质量', detail.scores.output], ['协作能力', detail.scores.collaboration], ['速度效率', detail.scores.speed]
+            ].map(([k,v]) => `<div class="score-row"><span>${k}</span><div class="score-bar"><div class="score-fill" style="width:${v}%"></div></div><span class="score-num">${v}</span></div>`).join('');
+            return `
+                <div class="detail-card"><div class="detail-card-title">工具简介</div><p class="detail-intro">${escapeHTML(detail.intro)}</p></div>
+                <div class="detail-two-col">
+                    <div class="detail-card"><div class="detail-card-title">核心功能</div><ul class="detail-feature-list">${tool.features.map(f => `<li>${getIcon('fa-check')} <span>${escapeHTML(f)}</span></li>`).join('')}</ul></div>
+                    <div class="detail-card"><div class="detail-card-title">综合评分</div><div class="score-list">${scoreRows}</div></div>
+                </div>
+                <div class="detail-card"><div class="detail-card-title">优缺点</div><div class="pros-cons"><div class="pc-box pro"><div class="pc-title">优点</div><ul>${detail.pros.map(p => `<li>${escapeHTML(p)}</li>`).join('')}</ul></div><div class="pc-box con"><div class="pc-title">局限</div><ul>${detail.cons.map(c => `<li>${escapeHTML(c)}</li>`).join('')}</ul></div></div></div>
+                <div class="detail-card"><div class="detail-card-title">适用场景</div><div class="detail-chip-wrap">${tool.tags.map(t => `<span class="detail-chip">${escapeHTML(t)}</span>`).join('')}</div></div>`;
+        }
+
+        function renderExamplePanel(tool, catKey, detail) {
+            const accent = cssVarToHex(categoryMeta[catKey]?.accent || 'var(--c1)');
+            const html = `<div class="detail-card"><div class="detail-card-title">${escapeHTML(detail.exampleTitle)}</div><div class="example-canvas" data-tool-id="${tool.id}">${buildExampleSVG(tool, catKey, accent)}</div><p class="example-caption">${escapeHTML(detail.exampleCaption)}</p></div>`;
+            return html;
+        }
+
+        function renderStepsPanel(detail) {
+            return `<div class="steps-list">${detail.steps.map((s, idx) => `<div class="step-item"><div class="step-num">${idx + 1}</div><div><div class="step-title">${escapeHTML(s[0])}</div><div class="step-desc">${escapeHTML(s[1])}</div></div></div>`).join('')}</div>`;
+        }
+
+        function renderCodePanel(tool, detail) {
+            // 优先使用工具数据里自带的 codeExample，如果没有，才用分类模板里的 code
+            const code = tool.codeExample || detail.code; 
+            const lang = tool.codeLang || detail.codeLang || 'Text';
+            
+            return `<div class="detail-card">
+                <div class="detail-card-title">${escapeHTML(tool.name)} 代码示例</div>
+                <div class="code-shell">
+                    <div class="code-toolbar">
+                        <div>${escapeHTML(lang)}</div>
+                        <button class="copy-code-btn" data-copy-code>复制代码</button>
+                    </div>
+                    <pre><code id="detailCodeBlock">${escapeHTML(code)}</code></pre>
+                </div>
+            </div>`;
+        }
+
+        function renderComparePanel(tool, detail) {
+            return `<div class="compare-grid"><div class="compare-card"><div class="compare-label">授权模式</div><div class="compare-value">${escapeHTML(detail.compare.license)}</div></div><div class="compare-card"><div class="compare-label">学习成本</div><div class="compare-value">${escapeHTML(detail.compare.learning)}</div></div><div class="compare-card"><div class="compare-label">最佳用途</div><div class="compare-value">${escapeHTML(detail.compare.bestFor)}</div></div><div class="compare-card"><div class="compare-label">常用输出</div><div class="compare-value">${escapeHTML(detail.compare.output)}</div></div></div><div class="detail-card" style="margin-top:1.25rem;"><div class="detail-card-title">选择建议</div><p class="detail-intro">如果你更看重可复现、批量处理和版本控制，可以优先选择代码化或开源工具；如果你更看重团队协作、模板和企业合规，可以优先考虑云端协作或商业工具。${escapeHTML(tool.name)} 的优势主要集中在：${escapeHTML(tool.features.slice(0, 3).join('、'))}。</p></div>`;
+        }
+
+        function renderResourcesPanel(tool) {
+            const resources = [
+                ['官网入口', '访问工具官方网站或在线编辑器', tool.link, 'fa-external-link-alt'],
+                ['使用文档', '查看官方教程、帮助中心或 API 文档', tool.doc, 'fa-book'],
+                ['推荐用途', tool.tags.slice(0, 3).join('、'), tool.link, 'fa-lightbulb'],
+                ['平台支持', tool.platforms.join(' / '), tool.doc, 'fa-desktop']
+            ];
+            return `<div class="resource-grid">${resources.map(([title, desc, url, icon]) => `<a class="resource-link-card" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer"><div class="resource-icon">${getIcon(icon)}</div><div><div class="resource-title">${escapeHTML(title)}</div><div class="resource-desc">${escapeHTML(desc)}</div></div></a>`).join('')}</div>`;
+        }
+
+        let currentModalData = null;
+
+        function openModal(toolId, catKey) {
+            const tool = getToolById(toolId, catKey);
+            if (!tool) return;
+            currentModalData = { tool, catKey };
+            const meta = categoryMeta[catKey];
+            const detail = { ...buildDefaultDetail(tool, catKey), ...(tool.detail || {}) };
+
+            const modal = document.getElementById('modal');
+            modal.style.setProperty('--detail-accent', meta?.accent || 'var(--c1)');
+            document.getElementById('modalIcon').innerHTML = getIcon(tool.icon);
+            document.getElementById('modalTitle').textContent = tool.name;
+            const badge = document.getElementById('modalPrimaryBadge');
+            badge.className = `card-badge ${tool.badge}`;
+            badge.textContent = tool.badgeText;
+            document.getElementById('modalSubtitle').innerHTML = `<span>${escapeHTML(tool.vendor)}</span><span>/</span>${tool.tags.slice(0, 4).map(t => `<span>${escapeHTML(t)}</span>`).join('<span>/</span>')}${tool.platforms.map(p => `<span class="detail-quick-badge">${getIcon(getPlatformIcon(p))} ${escapeHTML(p)}</span>`).join('')}`;
+
+            document.getElementById('panelOverview').innerHTML = renderOverviewPanel(tool, catKey, detail);
+            document.getElementById('panelExample').innerHTML = renderExamplePanel(tool, catKey, detail);
+            document.getElementById('panelSteps').innerHTML = renderStepsPanel(detail);
+            document.getElementById('panelCode').innerHTML = renderCodePanel(tool, detail);
+            document.getElementById('panelCompare').innerHTML = renderComparePanel(tool, detail);
+            document.getElementById('panelResources').innerHTML = renderResourcesPanel(tool);
+
+            document.querySelectorAll('.detail-tab').forEach((tab, index) => tab.classList.toggle('active', index === 0));
+            document.querySelectorAll('.detail-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === 'overview'));
+            bindCopyCode();
+            
+            // 绑定示例图片点击事件
+            setTimeout(() => {
+                const exampleImages = document.querySelectorAll('.example-canvas img');
+                exampleImages.forEach(img => {
+                    img.addEventListener('click', function() {
+                        openImageFullscreen(this.src, this.alt);
+                    });
+                });
+            }, 100);
+
+            document.getElementById('modalOverlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+            document.body.style.overflow = '';
+            currentModalData = null;
+        }
+
+        function initModal() {
+            document.getElementById('modalClose').addEventListener('click', closeModal);
+            document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+            document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+            document.querySelectorAll('.detail-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.detail-panel').forEach(p => p.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.querySelector(`[data-panel="${tab.dataset.tab}"]`)?.classList.add('active');
+                });
+            });
+        }
+
+        function bindCopyCode() {
+            const btn = document.querySelector('[data-copy-code]');
+            const code = document.getElementById('detailCodeBlock')?.textContent || '';
+            if (!btn) return;
+            btn.onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(code);
+                    btn.textContent = '已复制';
+                    setTimeout(() => btn.textContent = '复制代码', 1200);
+                } catch (e) {
+                    btn.textContent = '复制失败';
+                    setTimeout(() => btn.textContent = '复制代码', 1200);
+                }
+            };
+        }
+
+        function performSearch(query) {
+            query = query.toLowerCase().trim();
+            document.querySelectorAll('.empty-state').forEach(el => el.remove());
+            if (!query) {
+                document.querySelectorAll('.tool-card, .cat-card').forEach(card => card.style.display = '');
+                return;
+            }
+            let matchCount = 0;
+            document.querySelectorAll('.tool-card').forEach(card => {
+                const searchText = card.textContent.toLowerCase();
+                const matched = searchText.includes(query);
+                card.style.display = matched ? '' : 'none';
+                if (matched) matchCount++;
+            });
+            document.querySelectorAll('.cat-card').forEach(card => {
+                card.style.display = card.textContent.toLowerCase().includes(query) ? '' : 'none';
+            });
+            if (currentPage !== 'home' && matchCount === 0) {
+                const grid = document.getElementById(`grid-${currentPage}`);
+                if (grid) {
+                    const emptyEl = document.createElement('div');
+                    emptyEl.className = 'empty-state';
+                    emptyEl.style.cssText = 'grid-column: 1 / -1;';
+                    emptyEl.innerHTML = `<div style="font-size:3rem;opacity:.2;margin-bottom:1rem;">${getIcon('fa-magnifying-glass-chart')}</div><p>未找到与 "<strong>${escapeHTML(query)}</strong>" 相关的工具</p>`;
+                    grid.appendChild(emptyEl);
+                }
+            }
+        }
+
+        function initSearch() {
+            const searchInput = document.getElementById('searchInput');
+            let timer;
+            searchInput.addEventListener('input', e => {
+                clearTimeout(timer);
+                timer = setTimeout(() => performSearch(e.target.value), 250);
+            });
+            searchInput.addEventListener('keydown', e => {
+                if (e.key === 'Escape') {
+                    searchInput.value = '';
+                    performSearch('');
+                    searchInput.blur();
+                }
+            });
+        }
+
+        function toggleTheme() {
+            const body = document.body;
+            const themeToggle = document.getElementById('themeToggle');
+            const light = body.getAttribute('data-theme') === 'light';
+            if (light) {
+                body.removeAttribute('data-theme');
+                themeToggle.classList.remove('active');
+                localStorage.setItem('theme', 'dark');
+            } else {
+                body.setAttribute('data-theme', 'light');
+                themeToggle.classList.add('active');
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            const themeToggle = document.getElementById('themeToggle');
+            if (savedTheme === 'light') {
+                document.body.setAttribute('data-theme', 'light');
+                themeToggle.classList.add('active');
+            }
+            themeToggle.addEventListener('click', toggleTheme);
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('collapsed');
+            localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+        }
+
+        function initSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const toggleBtn = document.getElementById('sidebarToggle');
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            if (localStorage.getItem('sidebarCollapsed') === 'true') sidebar.classList.add('collapsed');
+            toggleBtn.addEventListener('click', toggleSidebar);
+            mobileMenuBtn.addEventListener('click', () => sidebar.classList.toggle('mobile-open'));
+            document.addEventListener('click', e => {
+                if (window.innerWidth <= 768 && sidebar.classList.contains('mobile-open') && !sidebar.contains(e.target) && !mobileMenuBtn.contains(e.target)) sidebar.classList.remove('mobile-open');
+            });
+        }
+
+        function initRouter() {
+            const hash = window.location.hash.replace('#', '');
+            if (hash && categoryMeta[hash]) setTimeout(() => navigateTo(hash), 100);
+            window.addEventListener('hashchange', () => {
+                const newHash = window.location.hash.replace('#', '');
+                if (newHash !== currentPage && categoryMeta[newHash]) navigateTo(newHash);
+            });
+        }
+
+        function initResponsive() {
+            const checkMobile = () => {
+                const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+                if (window.innerWidth <= 768) mobileMenuBtn.style.display = 'flex';
+                else {
+                    mobileMenuBtn.style.display = 'none';
+                    document.getElementById('sidebar')?.classList.remove('mobile-open');
+                }
+            };
+            checkMobile();
+            window.addEventListener('resize', checkMobile);
+        }
+
+        function initKeyboard() {
+            document.addEventListener('keydown', e => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); document.getElementById('searchInput')?.focus(); }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); toggleSidebar(); }
+                if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
+                    e.preventDefault();
+                    const cats = ['home', 'flowchart', 'mindmap', 'chart', '3dmodel', 'code', 'sim', 'science', 'aiart'];
+                    navigateTo(cats[parseInt(e.key) - 1]);
+                }
+            });
+        }
+
+        function updateTotals() {
+            const total = Object.values(toolsData).reduce((sum, arr) => sum + arr.length, 0);
+            document.getElementById('sidebarTotal').textContent = total;
+            document.getElementById('heroTotal').textContent = `${total}+`;
+            document.getElementById('heroTotalNum').textContent = `${total}+`;
+        }
+
+        function openImageFullscreen(src, alt) {
+            const overlay = document.getElementById('imageFullscreenOverlay');
+            const img = document.getElementById('imageFullscreenImg');
+            img.src = src;
+            img.alt = alt;
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeImageFullscreen() {
+            const overlay = document.getElementById('imageFullscreenOverlay');
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function initImageFullscreen() {
+            const overlay = document.getElementById('imageFullscreenOverlay');
+            const img = document.getElementById('imageFullscreenImg');
+            const closeBtn = document.getElementById('imageFullscreenClose');
+
+            // --- 状态变量 ---
+            let isZooming = false; // 是否处于放大状态（用于判断是否需要拖拽）
+            let isDragging = false; // 是否正在拖拽
+            let currentScale = 1;   // 当前缩放比例
+            let startX, startY;     // 鼠标按下时的坐标
+            let translateX = 0;     // 图片当前的水平位移
+            let translateY = 0;     // 图片当前的垂直位移
+
+            // --- 1. 重置图片状态 ---
+            function resetImage() {
+                currentScale = 1;
+                translateX = 0;
+                translateY = 0;
+                isZooming = false;
+                // 恢复 CSS 初始状态
+                img.style.transform = 'scale(1)';
+                img.style.maxWidth = '100%';
+                img.style.maxHeight = '100%';
+                img.style.cursor = 'zoom-in'; // 缩小时是放大镜
+            }
+
+            // --- 2. 更新图片 Transform ---
+            // 将 scale(缩放) 和 translate(位移) 结合
+            function updateTransform() {
+                img.style.transform = `scale(${currentScale}) translate(${translateX}px, ${translateY}px)`;
+            }
+
+            // --- 3. 打开图片 ---
+            function handleOpenImageFullscreen(src, alt) {
+                img.src = src;
+                img.alt = alt;
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+                resetImage(); // 每次打开重置
+                img.style.cursor = 'zoom-in'; // 确保初始光标
+            }
+
+            // --- 4. 缩放逻辑 (Ctrl + 滚轮) ---
+            function handleWheel(e) {
+                if (!e.ctrlKey || !overlay.classList.contains('active')) return;
+                e.preventDefault();
+
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                const oldScale = currentScale;
+                currentScale = Math.min(Math.max(0.5, currentScale * delta), 5);
+
+                // --- 关键：根据鼠标位置缩放 (可选，进阶体验) ---
+                // 这行代码让图片缩放的中心点是鼠标所在位置，体验更好
+                // 如果觉得复杂，可以先注释掉下面这行，直接用简单的缩放
+                // translateX -= (e.clientX - translateX) * (currentScale / oldScale - 1);
+                // translateY -= (e.clientY - translateY) * (currentScale / oldScale - 1);
+
+                if (currentScale > 1) {
+                    isZooming = true;
+                    img.style.maxWidth = 'none';
+                    img.style.maxHeight = 'none';
+                    img.style.cursor = 'grab'; // 缩放后光标变成手型
+                    updateTransform();
+                } else {
+                    // 缩小回原状，重置位移
+                    isZooming = false;
+                    translateX = 0;
+                    translateY = 0;
+                    resetImage();
+                }
+            }
+
+            // --- 5. 拖拽逻辑 (鼠标左键) ---
+            function handleMouseDown(e) {
+                // 只有在放大状态且点击左键才拖拽
+                if (!isZooming || e.button !== 0) return;
+                e.preventDefault(); // 防止选中图片或文字
+                
+                isDragging = true;
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+                img.style.cursor = 'grabbing'; // 按下时变成抓紧的手
+            }
+
+            function handleMouseMove(e) {
+                if (!isDragging) return;
+                // 计算位移差值
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                updateTransform();
+            }
+
+            function handleMouseUp() {
+                isDragging = false;
+                if (isZooming) {
+                    img.style.cursor = 'grab'; // 松开后恢复抓取手型
+                }
+            }
+
+            // --- 6. 关闭图片 ---
+            function handleCloseImageFullscreen() {
+                overlay.classList.remove('active');
+                document.body.style.overflow = '';
+                // 清理可能残留的拖拽状态
+                isDragging = false;
+                resetImage();
+            }
+
+            // --- 事件绑定 ---
+
+            // 滚轮缩放
+            img.addEventListener('wheel', handleWheel, { passive: false });
+
+            // 鼠标拖拽事件
+            img.addEventListener('mousedown', handleMouseDown);
+            document.addEventListener('mousemove', handleMouseMove); // 监听全局移动，防止鼠标移太快脱离图片
+            document.addEventListener('mouseup', handleMouseUp);   // 监听全局松开，防止鼠标移出窗口
+
+            // 关闭按钮和遮罩
+            closeBtn.addEventListener('click', handleCloseImageFullscreen);
+            overlay.addEventListener('click', e => { 
+                if (e.target === overlay) handleCloseImageFullscreen(); 
+            });
+
+            // 键盘事件
+            document.addEventListener('keydown', e => {
+                if (e.key === 'Escape' && overlay.classList.contains('active')) {
+                    handleCloseImageFullscreen();
+                }
+            });
+
+            // --- 暴露给外部调用 ---
+            window.openImageFullscreen = handleOpenImageFullscreen;
+        }
+
+        function init() {
+            buildNavigation();
+            renderPages();
+            bindCards();
+            initNavigation();
+            initModal();
+            initSearch();
+            initTheme();
+            initSidebar();
+            initRouter();
+            initResponsive();
+            initKeyboard();
+            initImageFullscreen();
+            updateTotals();
+            setTimeout(() => {
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                loadingOverlay?.classList.add('hidden');
+                setTimeout(() => { if (loadingOverlay) loadingOverlay.style.display = 'none'; }, 600);
+            }, 500);
+        }
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+        else init();
+    </script>
+</body>
+</html>
